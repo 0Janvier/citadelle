@@ -1,0 +1,1 @@
+export { PiecesSidebarPanel } from './PiecesSidebarPanel'

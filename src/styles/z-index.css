@@ -1,0 +1,46 @@
+/**
+ * Système de Z-index Unifié - Citadelle
+ *
+ * Hiérarchie claire pour éviter les chevauchements d'éléments UI.
+ * Incréments de 100 pour flexibilité.
+ */
+
+:root {
+  /* Base level - contenu normal */
+  --z-base: 0;
+
+  /* Dropdowns de la toolbar et menus inline */
+  --z-dropdown: 100;
+
+  /* Éléments sticky (status bar, headers fixes) */
+  --z-sticky: 200;
+
+  /* Toolbars flottantes (table toolbar, bubble menus) */
+  --z-floating: 300;
+
+  /* Panels overlay (find/replace, sidebars) */
+  --z-overlay: 400;
+
+  /* Modales (dialogs, settings, export) */
+  --z-modal: 500;
+
+  /* Popovers et context menus */
+  --z-popover: 600;
+
+  /* Notifications toast */
+  --z-toast: 700;
+
+  /* Tooltips (toujours au-dessus) */
+  --z-tooltip: 800;
+}
+
+/* Classes utilitaires pour z-index */
+.z-base { z-index: var(--z-base); }
+.z-dropdown { z-index: var(--z-dropdown); }
+.z-sticky { z-index: var(--z-sticky); }
+.z-floating { z-index: var(--z-floating); }
+.z-overlay { z-index: var(--z-overlay); }
+.z-modal { z-index: var(--z-modal); }
+.z-popover { z-index: var(--z-popover); }
+.z-toast { z-index: var(--z-toast); }
+.z-tooltip { z-index: var(--z-tooltip); }

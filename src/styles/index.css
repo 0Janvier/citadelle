@@ -1,0 +1,393 @@
+@import './z-index.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ========================================
+       APPLE HIG DESIGN TOKENS
+       ======================================== */
+
+    /* Spacing Scale (8pt grid system) */
+    --space-0: 0px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* Typography Scale (macOS HIG) */
+    --font-size-large-title: 26px;
+    --line-height-large-title: 32px;
+    --font-size-title-1: 22px;
+    --line-height-title-1: 26px;
+    --font-size-title-2: 17px;
+    --line-height-title-2: 22px;
+    --font-size-title-3: 15px;
+    --line-height-title-3: 20px;
+    --font-size-headline: 13px;
+    --line-height-headline: 16px;
+    --font-size-body: 13px;
+    --line-height-body: 16px;
+    --font-size-callout: 12px;
+    --line-height-callout: 15px;
+    --font-size-subheadline: 11px;
+    --line-height-subheadline: 14px;
+    --font-size-footnote: 10px;
+    --line-height-footnote: 13px;
+    --font-size-caption: 10px;
+    --line-height-caption: 13px;
+
+    /* Touch Target Sizes (HIG minimum 44pt) */
+    --touch-target-min: 44px;
+    --touch-target-comfortable: 48px;
+    --button-height-sm: 28px;
+    --button-height-md: 36px;
+    --button-height-lg: 44px;
+
+    /* Border Radius Scale (consistent hierarchy) */
+    --radius-none: 0px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+    --radius-full: 9999px;
+
+    /* Shadow/Elevation Scale */
+    --shadow-none: none;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 8px 10px rgba(0, 0, 0, 0.04);
+    --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-modal: 0 25px 50px rgba(0, 0, 0, 0.25);
+
+    /* Animation Durations (standardized) */
+    --duration-instant: 100ms;
+    --duration-fast: 150ms;
+    --duration-normal: 200ms;
+    --duration-slow: 300ms;
+    --duration-slower: 400ms;
+
+    /* Animation Easings */
+    --ease-default: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --ease-in: cubic-bezier(0.42, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.58, 1);
+    --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Focus Ring (Accessibility) */
+    --focus-ring-width: 3px;
+    --focus-ring-offset: 2px;
+    --focus-ring-color: var(--accent);
+
+    /* ========================================
+       THEME COLOR VARIABLES
+       ======================================== */
+
+    /* Light theme variables */
+    --bg: #ffffff;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f7;
+    --bg-tertiary: #e8e8ed;
+    --bg-hover: #f0f0f2;
+    --text: #1d1d1f;
+    --text-secondary: #86868b;
+    --text-muted: #aeaeb2;
+    --accent: #007aff;
+    --accent-hover: #0051d5;
+    --editor-bg: #fafafa;
+    --border: #e5e7eb;
+    --border-color: #e5e7eb;
+    /* Status colors */
+    --status-success: #34c759;
+    --status-warning: #ff9500;
+    --status-error: #ff3b30;
+    --status-info: #5ac8fa;
+  }
+
+  :root.dark {
+    /* Dark theme variables */
+    --bg: #1e1e1e;
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #3d3d3d;
+    --bg-hover: #3a3a3c;
+    --text: #d4d4d4;
+    --text-secondary: #8e8e93;
+    --text-muted: #636366;
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --editor-bg: #252525;
+    --border: #374151;
+    --border-color: #374151;
+    /* Status colors */
+    --status-success: #30d158;
+    --status-warning: #ff9f0a;
+    --status-error: #ff453a;
+    --status-info: #64d2ff;
+    /* Dark mode shadows (stronger) */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3), 0 4px 6px rgba(0, 0, 0, 0.2);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.35), 0 8px 10px rgba(0, 0, 0, 0.2);
+    --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-modal: 0 25px 50px rgba(0, 0, 0, 0.5);
+  }
+
+  :root[data-theme="sepia"] {
+    /* Sepia theme variables */
+    --bg: #f4ecd8;
+    --bg-primary: #f4ecd8;
+    --bg-secondary: #ebe3cf;
+    --bg-tertiary: #e0d8c4;
+    --bg-hover: #e5dcc8;
+    --text: #5b4636;
+    --text-secondary: #8b7355;
+    --text-muted: #a89880;
+    --accent: #8b4513;
+    --accent-hover: #a0522d;
+    --editor-bg: #f9f3e3;
+    --border: #d4c5a9;
+    --border-color: #d4c5a9;
+    /* Status colors */
+    --status-success: #4a7c59;
+    --status-warning: #c68b3a;
+    --status-error: #a94442;
+    --status-info: #5a8f9f;
+  }
+
+  body {
+    @apply bg-[var(--bg)] text-[var(--text)];
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  code {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas,
+      'Courier New', monospace;
+  }
+}
+
+@layer components {
+  /* macOS title bar overlay safe area */
+  .macos-titlebar-safe-area {
+    /* Height for macOS traffic lights when titleBarStyle is "Overlay" */
+    height: env(titlebar-area-height, 28px);
+    min-height: 28px;
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  /* Prevent buttons and interactive elements from blocking drag */
+  .macos-titlebar-safe-area button,
+  .macos-titlebar-safe-area a,
+  .macos-titlebar-safe-area input,
+  .macos-titlebar-safe-area [data-no-drag] {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-500;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-fadeIn {
+    animation: fadeIn var(--duration-normal) var(--ease-out);
+  }
+
+  .animate-scaleIn {
+    animation: scaleIn var(--duration-fast) var(--ease-spring);
+  }
+
+  .animate-slideInRight {
+    animation: slideInRight var(--duration-slow) var(--ease-out);
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slideUp {
+    animation: slideUp var(--duration-fast) var(--ease-out);
+  }
+
+  /* ========================================
+     TOUCH TARGET UTILITIES
+     ======================================== */
+  .touch-target {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
+
+  .touch-target-comfortable {
+    min-width: var(--touch-target-comfortable);
+    min-height: var(--touch-target-comfortable);
+  }
+
+  /* ========================================
+     FOCUS RING UTILITIES
+     ======================================== */
+  .focus-ring {
+    @apply outline-none;
+  }
+
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 var(--focus-ring-offset) var(--bg),
+                0 0 0 calc(var(--focus-ring-offset) + var(--focus-ring-width)) var(--focus-ring-color);
+  }
+
+  /* Global focus-visible styles for interactive elements */
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply outline-none;
+    box-shadow: 0 0 0 var(--focus-ring-offset) var(--bg),
+                0 0 0 calc(var(--focus-ring-offset) + var(--focus-ring-width)) var(--focus-ring-color);
+  }
+
+  /* ========================================
+     TYPOGRAPHY UTILITIES (macOS HIG)
+     ======================================== */
+  .text-large-title {
+    font-size: var(--font-size-large-title);
+    line-height: var(--line-height-large-title);
+  }
+
+  .text-title-1 {
+    font-size: var(--font-size-title-1);
+    line-height: var(--line-height-title-1);
+  }
+
+  .text-title-2 {
+    font-size: var(--font-size-title-2);
+    line-height: var(--line-height-title-2);
+  }
+
+  .text-title-3 {
+    font-size: var(--font-size-title-3);
+    line-height: var(--line-height-title-3);
+  }
+
+  .text-headline {
+    font-size: var(--font-size-headline);
+    line-height: var(--line-height-headline);
+    font-weight: 700;
+  }
+
+  .text-body {
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+  }
+
+  .text-callout {
+    font-size: var(--font-size-callout);
+    line-height: var(--line-height-callout);
+  }
+
+  .text-subheadline {
+    font-size: var(--font-size-subheadline);
+    line-height: var(--line-height-subheadline);
+  }
+
+  .text-footnote {
+    font-size: var(--font-size-footnote);
+    line-height: var(--line-height-footnote);
+  }
+
+  .text-caption {
+    font-size: var(--font-size-caption);
+    line-height: var(--line-height-caption);
+  }
+
+  /* ========================================
+     INTERACTIVE ELEMENT BASE STYLES
+     ======================================== */
+  .interactive {
+    @apply transition-colors cursor-pointer;
+    transition-duration: var(--duration-fast);
+  }
+
+  .interactive:focus-visible {
+    @apply outline-none;
+    box-shadow: 0 0 0 var(--focus-ring-offset) var(--bg),
+                0 0 0 calc(var(--focus-ring-offset) + var(--focus-ring-width)) var(--focus-ring-color);
+  }
+
+  /* ========================================
+     DISABLED STATE UTILITIES
+     ======================================== */
+  .disabled-visual {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  button:disabled,
+  [disabled] {
+    @apply cursor-not-allowed opacity-50;
+  }
+}

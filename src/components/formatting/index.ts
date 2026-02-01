@@ -1,0 +1,1 @@
+export { FormattingPanel } from './FormattingPanel'

@@ -1,0 +1,46 @@
+/* Theme-specific overrides and utilities */
+
+/* Light theme specific styles */
+:root:not(.dark):not([data-theme="sepia"]) {
+  /* Additional light theme customizations */
+}
+
+/* Dark theme specific styles */
+:root.dark {
+  /* Additional dark theme customizations */
+}
+
+/* Sepia theme specific styles */
+:root[data-theme="sepia"] {
+  /* Additional sepia theme customizations */
+}
+
+/* Smooth theme transitions */
+:root {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.ProseMirror {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Hide UI elements in distraction-free mode */
+.distraction-free .tab-bar,
+.distraction-free .toolbar,
+.distraction-free .status-bar {
+  @apply opacity-0 pointer-events-none transition-opacity duration-300;
+}
+
+.distraction-free:hover .tab-bar,
+.distraction-free:hover .toolbar {
+  @apply opacity-100 pointer-events-auto;
+}
+
+.distraction-free .status-bar:hover {
+  @apply opacity-100 pointer-events-auto;
+}
+
+/* Centered content in distraction-free */
+.distraction-free .editor-content {
+  @apply max-w-3xl mx-auto;
+}
