@@ -97,8 +97,8 @@ function buildDecorations(
 
       const collapsed = collapsedSet.has(headingId)
 
-      // Add chevron widget decoration before the heading
-      const chevronWidget = Decoration.widget(pos, () => {
+      // Add chevron widget decoration INSIDE the heading (pos + 1 = after opening tag)
+      const chevronWidget = Decoration.widget(pos + 1, () => {
         const button = document.createElement('button')
         button.className = `collapsible-chevron ${collapsed ? 'collapsed' : 'expanded'}`
         button.setAttribute('data-heading-id', headingId)
@@ -114,11 +114,8 @@ function buildDecorations(
           </svg>
         `
 
-        button.addEventListener('click', (e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          onToggle(headingId)
-        })
+        // Click is handled by handleDOMEvents in the plugin props
+        // This allows proper transaction dispatch for decoration updates
 
         return button
       }, { side: -1, key: `chevron-${headingId}` })
