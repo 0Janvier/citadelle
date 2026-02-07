@@ -6,6 +6,9 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
 
+  // Use relative paths for Tauri production builds
+  base: './',
+
   // Polyfill Buffer pour pdfmake qui en a besoin pour les fonts
   define: {
     'global': 'globalThis',

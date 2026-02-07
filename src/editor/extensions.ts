@@ -2,7 +2,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { ResizableImage } from './ResizableImageExtension'
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableHeader from '@tiptap/extension-table-header'
@@ -15,6 +15,9 @@ import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import TextStyle from '@tiptap/extension-text-style'
 import FontFamily from '@tiptap/extension-font-family'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
+import Color from '@tiptap/extension-color'
 import { Extension } from '@tiptap/core'
 import { KeyboardShortcutsExtension } from './KeyboardShortcutsExtension'
 import { PageBreak } from './PageBreakExtension'
@@ -22,10 +25,15 @@ import { SlashCommandExtension, createSlashCommandSuggestion } from './SlashComm
 import { VariablePlaceholderExtension } from './VariablePlaceholderExtension'
 import { LegalNumberingExtension } from './LegalNumberingExtension'
 import { DefinedTermsExtension } from './DefinedTermsExtension'
+import { FootnoteExtension } from './FootnoteExtension'
+import { CommentExtension } from './CommentExtension'
+import { InsertionMark, DeletionMark, TrackChangesExtension } from './TrackChangesExtension'
 import { common, createLowlight } from 'lowlight'
 import { useSnippetStore } from '../store/useSnippetStore'
 import { useVariableStore } from '../store/useVariableStore'
 import { useDefinedTermsStore } from '../store/useDefinedTermsStore'
+import { searchAllCodes, formatArticleForInsertion, CODE_LABELS } from '../data/codes/index'
+import type { Snippet } from '../types/editor-features'
 
 // Déclaration des types pour les commandes de police
 declare module '@tiptap/core' {
@@ -108,13 +116,10 @@ export const extensions = [
     autolink: true, // Auto-detect URLs
   }),
 
-  // Image support
-  Image.configure({
+  // Resizable image with alignment and drag handles
+  ResizableImage.configure({
     inline: true,
     allowBase64: true,
-    HTMLAttributes: {
-      class: 'max-w-full h-auto rounded-lg',
-    },
   }),
 
   // Tables
@@ -165,8 +170,19 @@ export const extensions = [
   // Underline (souligné)
   Underline,
 
-  // Text styling (required for font family and size)
+  // Superscript (exposant) - ex: 1er, 2e, art. 700
+  Superscript,
+
+  // Subscript (indice)
+  Subscript,
+
+  // Text styling (required for font family, size, and color)
   TextStyle,
+
+  // Text color (couleur de texte)
+  Color.configure({
+    types: ['textStyle'],
+  }),
 
   // Font family (police de caractères)
   FontFamily.configure({
@@ -189,11 +205,101 @@ export const extensions = [
   // Page breaks for pagination
   PageBreak,
 
-  // Slash commands for snippets (/plaise, /attendu, etc.)
+  // Slash commands for snippets (/plaise, /attendu, etc.) + articles de code + blocs
   SlashCommandExtension.configure({
     suggestion: createSlashCommandSuggestion(
-      (query) => useSnippetStore.getState().getSuggestions(query),
-      (item) => useSnippetStore.getState().incrementUsage(item.id)
+      (query) => {
+        // Commandes de blocs intégrées (toujours disponibles)
+        const builtinBlocks: Snippet[] = [
+          { id: 'block-h1', nom: 'Titre 1', description: 'Titre principal', raccourci: '/h1',
+            contenu: { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: ' ' }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-h2', nom: 'Titre 2', description: 'Sous-titre', raccourci: '/h2',
+            contenu: { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: ' ' }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-h3', nom: 'Titre 3', description: 'Section', raccourci: '/h3',
+            contenu: { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: ' ' }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-bullet', nom: 'Liste a puces', description: 'Liste non ordonnee', raccourci: '/liste',
+            contenu: { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-ordered', nom: 'Liste numerotee', description: 'Liste ordonnee', raccourci: '/num',
+            contenu: { type: 'orderedList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-task', nom: 'Liste de taches', description: 'Cases a cocher', raccourci: '/tache',
+            contenu: { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-quote', nom: 'Citation', description: 'Bloc de citation', raccourci: '/citation',
+            contenu: { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-code', nom: 'Bloc de code', description: 'Code formate', raccourci: '/code',
+            contenu: { type: 'codeBlock', content: [{ type: 'text', text: ' ' }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-hr', nom: 'Ligne horizontale', description: 'Separateur', raccourci: '/hr',
+            contenu: { type: 'horizontalRule' },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-table', nom: 'Tableau', description: 'Tableau 3x3', raccourci: '/tableau',
+            contenu: { type: 'table', content: [
+              { type: 'tableRow', content: [
+                { type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+                { type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+                { type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+              ]},
+              { type: 'tableRow', content: [
+                { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+                { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+                { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] },
+              ]},
+            ]},
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-pagebreak', nom: 'Saut de page', description: 'Nouvelle page', raccourci: '/page',
+            contenu: { type: 'pageBreak' },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+        ]
+
+        // Regular snippet suggestions
+        const snippets = useSnippetStore.getState().getSuggestions(query)
+
+        // If query starts with 'art' or is a number, also search legal codes
+        const isArticleQuery = /^(art|Art|ART|\d)/.test(query)
+        if (isArticleQuery && query.length >= 2) {
+          const articleQuery = query.replace(/^art\s*/i, '').trim()
+          if (articleQuery.length > 0) {
+            const articles = searchAllCodes(articleQuery).slice(0, 5)
+            const articleSnippets: Snippet[] = articles.map((article) => ({
+              id: `code-${article.code}-${article.numero}`,
+              nom: `Art. ${article.numero} ${CODE_LABELS[article.code]}`,
+              description: article.titre || article.contenu.slice(0, 60) + '...',
+              raccourci: `/art${article.numero}`,
+              contenu: formatArticleForInsertion(article, article.code),
+              category: 'general' as const,
+              variables: [],
+              isBuiltin: true,
+              usageCount: 0,
+              createdAt: '',
+              updatedAt: '',
+            }))
+            return [...snippets, ...articleSnippets]
+          }
+        }
+
+        // Filtrer les blocs intégrés par query
+        const lowerQuery = query.toLowerCase()
+        const matchingBlocks = builtinBlocks.filter((b) => {
+          if (!query) return true // "/" seul → tout montrer
+          return b.nom.toLowerCase().includes(lowerQuery) ||
+                 b.raccourci.toLowerCase().includes('/' + lowerQuery) ||
+                 (b.description || '').toLowerCase().includes(lowerQuery)
+        })
+
+        return [...snippets, ...matchingBlocks]
+      },
+      (item) => {
+        // Only increment usage for real snippets (not builtin blocks or article results)
+        if (!item.id.startsWith('code-') && !item.id.startsWith('block-')) {
+          useSnippetStore.getState().incrementUsage(item.id)
+        }
+      }
     ),
   }),
 
@@ -210,6 +316,17 @@ export const extensions = [
   LegalNumberingExtension.configure({
     enabled: true,
   }),
+
+  // Footnotes (notes de bas de page pour citations juridiques)
+  FootnoteExtension,
+
+  // Comments (commentaires et annotations)
+  CommentExtension,
+
+  // Track changes marks and controller
+  InsertionMark,
+  DeletionMark,
+  TrackChangesExtension,
 
   // Defined terms detection and highlighting
   DefinedTermsExtension.configure({

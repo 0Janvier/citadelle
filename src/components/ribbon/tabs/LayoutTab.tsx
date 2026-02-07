@@ -6,15 +6,20 @@
 import { useState } from 'react'
 import {
   FileText,
-  Maximize,
   RotateCcw,
   Ruler,
-  ArrowUpDown,
+  FileDown,
+  Settings2,
 } from 'lucide-react'
 import { usePageStore } from '../../../store/usePageStore'
+import { useEditorStore } from '../../../store/useEditorStore'
+import { useDocumentStore } from '../../../store/useDocumentStore'
+import { useSettingsStore } from '../../../store/useSettingsStore'
+import { useExportPDFNative } from '../../../hooks/useExportPDFNative'
 import { RibbonButton } from '../RibbonButton'
 import { RibbonGroup, RibbonDivider } from '../RibbonGroup'
 import { RibbonTab } from '../RibbonTab'
+import { ParagraphSpacingPicker } from '../controls/ParagraphSpacingPicker'
 
 const MARGIN_PRESETS = [
   { label: 'Normal', values: { top: 72, bottom: 72, left: 72, right: 72 }, description: '2.54 cm partout' },
@@ -42,6 +47,15 @@ export function LayoutTab() {
   const setPageFormat = usePageStore((state) => state.setPageFormat)
   const orientation = usePageStore((state) => state.orientation)
   const setOrientation = usePageStore((state) => state.setOrientation)
+
+  const setPdfExportSettingsOpen = useEditorStore((state) => state.setPdfExportSettingsOpen)
+  const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
+  const { exportToPDF } = useExportPDFNative()
+
+  const paragraphSpacing = useSettingsStore((state) => state.paragraphSpacing)
+  const paragraphIndent = useSettingsStore((state) => state.paragraphIndent)
+  const setParagraphSpacing = useSettingsStore((state) => state.setParagraphSpacing)
+  const setParagraphIndent = useSettingsStore((state) => state.setParagraphIndent)
 
   const handleMarginsChange = (preset: typeof MARGIN_PRESETS[number]) => {
     setMargins(preset.values)
@@ -153,29 +167,34 @@ export function LayoutTab() {
 
       {/* Espacement */}
       <RibbonGroup label="Espacement">
+        <ParagraphSpacingPicker
+          spacingValue={paragraphSpacing}
+          indentValue={paragraphIndent}
+          onSpacingChange={setParagraphSpacing}
+          onIndentChange={setParagraphIndent}
+        />
+      </RibbonGroup>
+
+      <RibbonDivider />
+
+      {/* Export PDF */}
+      <RibbonGroup label="Export PDF">
         <RibbonButton
           variant="large"
-          onClick={() => {
-            // Ouvrir le panneau de mise en page
-            const event = new CustomEvent('open-panel', { detail: { panel: 'layout' } })
-            window.dispatchEvent(event)
-          }}
-          tooltip="Options d'espacement"
+          onClick={() => activeDocumentId && exportToPDF(activeDocumentId)}
+          disabled={!activeDocumentId}
+          tooltip="Exporter en PDF (Cmd+E)"
         >
-          <ArrowUpDown size={20} />
-          <span>Retrait</span>
+          <FileDown size={20} />
+          <span>Exporter</span>
         </RibbonButton>
         <RibbonButton
           variant="large"
-          onClick={() => {
-            // Ouvrir le panneau de typographie
-            const event = new CustomEvent('open-panel', { detail: { panel: 'typography' } })
-            window.dispatchEvent(event)
-          }}
-          tooltip="Options de paragraphe"
+          onClick={() => setPdfExportSettingsOpen(true)}
+          tooltip="Paramètres d'export PDF"
         >
-          <Maximize size={20} />
-          <span>Paragraphe</span>
+          <Settings2 size={20} />
+          <span>Paramètres</span>
         </RibbonButton>
       </RibbonGroup>
     </RibbonTab>

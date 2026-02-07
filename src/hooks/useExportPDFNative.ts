@@ -17,8 +17,9 @@ if (typeof globalThis !== 'undefined' && !(globalThis as unknown as { Buffer?: t
 import { save } from '@tauri-apps/api/dialog'
 import { writeBinaryFile } from '@tauri-apps/api/fs'
 import { useDocumentStore } from '../store/useDocumentStore'
+import { useEditorStore } from '../store/useEditorStore'
 import { useDocumentCounterStore } from '../store/useDocumentCounterStore'
-import { usePageStore, replacePageVariables } from '../store/usePageStore'
+import { replacePageVariables } from '../store/usePageStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useExportTemplateStore } from '../store/useExportTemplateStore'
 import { useLawyerProfileStore } from '../store/useLawyerProfileStore'
@@ -32,6 +33,9 @@ import {
   replaceStaticVariables,
 } from '../lib/exportUtils'
 import { loadGaramondFonts, getAvailableFont } from '../lib/pdfFonts'
+import { usePdfExportSettingsStore } from '../store/usePdfExportSettingsStore'
+import { useVersionStore } from '../store/useVersionStore'
+import { HeadingNumberer } from '../lib/headingNumbering'
 
 // pdfmake et ses fonts - on n'initialise pas au chargement du module
 // car les imports ESM peuvent ne pas être prêts immédiatement
@@ -151,6 +155,7 @@ async function initializePdfMake(): Promise<boolean> {
 type PdfMakeContent = {
   text?: string | PdfMakeContent[]
   style?: string
+  font?: string
   bold?: boolean
   italics?: boolean
   decoration?: string
@@ -230,85 +235,96 @@ export function useExportPDFNative() {
   const toast = useToast()
 
   /**
-   * Convertit un noeud TipTap en format pdfmake
+   * Crée une fonction de conversion avec numérotation optionnelle
    */
-  const convertToPdfmake = (node: JSONContent): PdfMakeContent | PdfMakeContent[] | null => {
-    if (!node) return null
+  // Collect footnotes during conversion for rendering at end
+  const collectedFootnotes: { id: string; number: number; content: string }[] = []
+  let footnoteCounter = 0
 
-    switch (node.type) {
-      case 'doc':
-        return (node.content || [])
-          .map(convertToPdfmake)
-          .filter((item): item is PdfMakeContent => item !== null)
-          .flat()
+  const createConverter = (numberer: HeadingNumberer | null, customColors?: Record<string, string>) => {
+    const convertToPdfmake = (node: JSONContent): PdfMakeContent | PdfMakeContent[] | null => {
+      if (!node) return null
 
-      case 'paragraph': {
-        const content = (node.content || [])
-          .map(convertToPdfmake)
-          .filter((item): item is PdfMakeContent => item !== null)
+      switch (node.type) {
+        case 'doc':
+          return (node.content || [])
+            .map(convertToPdfmake)
+            .filter((item): item is PdfMakeContent => item !== null)
+            .flat()
 
-        // Récupérer les paramètres de typographie (avec fallback sur valeurs juridiques)
-        const settings = useSettingsStore.getState()
-        const indentPoints = (settings.paragraphIndent || 0) * 28.35 // cm vers points
-        // Espacement entre paragraphes : 6 points par défaut (style juridique compact)
-        const spacingPoints = LEGAL_DEFAULTS.paragraphSpacing
+        case 'paragraph': {
+          const content = (node.content || [])
+            .map(convertToPdfmake)
+            .filter((item): item is PdfMakeContent => item !== null)
 
-        // L'alignement par défaut : justifié (style juridique français)
-        const alignment = (node.attrs?.textAlign as 'left' | 'center' | 'right' | 'justify') || 'justify'
+          // Récupérer les paramètres de typographie (avec fallback sur valeurs juridiques)
+          const settings = useSettingsStore.getState()
+          const indentPoints = (settings.paragraphIndent || 0) * 28.35 // cm vers points
+          // Espacement entre paragraphes : 6 points par défaut (style juridique compact)
+          const spacingPoints = LEGAL_DEFAULTS.paragraphSpacing
 
-        if (content.length === 0) {
-          return { text: ' ', margin: [0, 0, 0, spacingPoints] }
+          // L'alignement par défaut : justifié (style juridique français)
+          const alignment = (node.attrs?.textAlign as 'left' | 'center' | 'right' | 'justify') || 'justify'
+
+          if (content.length === 0) {
+            return { text: ' ', margin: [0, 0, 0, spacingPoints] }
+          }
+
+          // Style juridique : alinéa en retrait
+          return {
+            text: content,
+            alignment,
+            margin: [0, 0, 0, spacingPoints],
+            leadingIndent: indentPoints > 0 ? indentPoints : undefined,
+          }
         }
 
-        // Style juridique : alinéa en retrait
-        return {
-          text: content,
-          alignment,
-          margin: [0, 0, 0, spacingPoints],
-          leadingIndent: indentPoints > 0 ? indentPoints : undefined,
+        case 'heading': {
+          const level = node.attrs?.level || 1
+          const content = (node.content || [])
+            .map(convertToPdfmake)
+            .filter((item): item is PdfMakeContent => item !== null)
+
+          // Tailles proportionnelles à la taille de base (style juridique professionnel)
+          const baseFontSize = LEGAL_DEFAULTS.fontSize
+          const sizeMultipliers: Record<number, number> = {
+            1: 1.75,     // h1 = 21pt (titre principal)
+            2: 1.5,      // h2 = 18pt (sections)
+            3: 1.25,     // h3 = 15pt (sous-sections)
+            4: 1.08,     // h4 = 13pt (paragraphes titrés)
+            5: 1.0,      // h5 = 12pt
+            6: 0.92,     // h6 = 11pt
+          }
+
+          // Couleurs : utiliser les couleurs personnalisées si fournies
+          const headingColors: Record<number, string> = {
+            1: customColors?.h1 || LEGAL_COLORS.darkBlue,
+            2: customColors?.h2 || LEGAL_COLORS.darkBlue,
+            3: customColors?.h3 || LEGAL_COLORS.mediumBlue,
+            4: customColors?.h4 || LEGAL_COLORS.darkGray,
+            5: LEGAL_COLORS.darkGray,
+            6: LEGAL_COLORS.mediumGray,
+          }
+
+          // Espacement professionnel
+          const spacing = LEGAL_DEFAULTS.headingSpacing[`h${level}` as keyof typeof LEGAL_DEFAULTS.headingSpacing]
+            || { before: 12, after: 6 }
+
+          // Numérotation automatique si activée
+          const number = numberer?.increment(level)
+          const textContent = number
+            ? [{ text: number + ' ', bold: true }, ...content]
+            : content
+
+          return {
+            text: textContent,
+            fontSize: Math.round(baseFontSize * (sizeMultipliers[level] || 1)),
+            bold: true,
+            color: headingColors[level] || LEGAL_COLORS.darkGray,
+            alignment: (node.attrs?.textAlign as 'left' | 'center' | 'right') || 'left',
+            margin: [0, spacing.before, 0, spacing.after],
+          }
         }
-      }
-
-      case 'heading': {
-        const level = node.attrs?.level || 1
-        const content = (node.content || [])
-          .map(convertToPdfmake)
-          .filter((item): item is PdfMakeContent => item !== null)
-
-        // Tailles proportionnelles à la taille de base (style juridique professionnel)
-        const baseFontSize = LEGAL_DEFAULTS.fontSize
-        const sizeMultipliers: Record<number, number> = {
-          1: 1.75,     // h1 = 21pt (titre principal)
-          2: 1.5,      // h2 = 18pt (sections)
-          3: 1.25,     // h3 = 15pt (sous-sections)
-          4: 1.08,     // h4 = 13pt (paragraphes titrés)
-          5: 1.0,      // h5 = 12pt
-          6: 0.92,     // h6 = 11pt
-        }
-
-        // Couleurs selon le niveau (bleu foncé pour titres principaux)
-        const headingColors: Record<number, string> = {
-          1: LEGAL_COLORS.darkBlue,
-          2: LEGAL_COLORS.darkBlue,
-          3: LEGAL_COLORS.mediumBlue,
-          4: LEGAL_COLORS.darkGray,
-          5: LEGAL_COLORS.darkGray,
-          6: LEGAL_COLORS.mediumGray,
-        }
-
-        // Espacement professionnel
-        const spacing = LEGAL_DEFAULTS.headingSpacing[`h${level}` as keyof typeof LEGAL_DEFAULTS.headingSpacing]
-          || { before: 12, after: 6 }
-
-        return {
-          text: content,
-          fontSize: Math.round(baseFontSize * (sizeMultipliers[level] || 1)),
-          bold: true,
-          color: headingColors[level] || LEGAL_COLORS.darkGray,
-          alignment: (node.attrs?.textAlign as 'left' | 'center' | 'right') || 'left',
-          margin: [0, spacing.before, 0, spacing.after],
-        }
-      }
 
       case 'text': {
         const styles: Partial<PdfMakeContent> = {}
@@ -369,8 +385,12 @@ export function useExportPDFNative() {
                   }
                 }
                 if (mark.attrs?.fontFamily) {
-                  // Note: pdfmake ne supporte que les fonts enregistrées
-                  // On ignore fontFamily ici car Roboto est la seule disponible
+                  const family = mark.attrs.fontFamily as string
+                  if (family.includes('Garamond') || family.includes('garamond')) {
+                    styles.font = 'Garamond'
+                  } else if (family.includes('Roboto') || family.includes('roboto')) {
+                    styles.font = 'Roboto'
+                  }
                 }
                 break
             }
@@ -523,9 +543,17 @@ export function useExportPDFNative() {
 
       case 'image': {
         if (node.attrs?.src) {
+          const imgWidth = Math.min(
+            typeof node.attrs.width === 'number' ? node.attrs.width : parseInt(node.attrs.width) || 400,
+            500
+          )
+          const alignment = node.attrs.alignment === 'left' ? 'left'
+            : node.attrs.alignment === 'right' ? 'right'
+            : 'center'
           return {
             image: node.attrs.src,
-            width: Math.min(node.attrs.width || 400, 500),
+            width: imgWidth,
+            alignment,
             margin: [0, 10, 0, 10],
           }
         }
@@ -551,6 +579,23 @@ export function useExportPDFNative() {
         }
       }
 
+      case 'footnote': {
+        footnoteCounter++
+        const fnNumber = footnoteCounter
+        const fnContent = (node.attrs?.content as string) || ''
+        collectedFootnotes.push({
+          id: (node.attrs?.footnoteId as string) || '',
+          number: fnNumber,
+          content: fnContent,
+        })
+        return {
+          text: String(fnNumber),
+          fontSize: 7,
+          color: LEGAL_COLORS.darkBlue,
+          bold: true,
+        }
+      }
+
       default:
         if (node.content) {
           return (node.content || [])
@@ -562,8 +607,14 @@ export function useExportPDFNative() {
     }
   }
 
+    return convertToPdfmake
+  }
+
+  // Fonction de conversion par défaut (sans numérotation)
+  const convertToPdfmake = createConverter(null)
+
   /**
-   * Génère le header pour chaque page avec support première page différente
+   * Génère le header pour chaque page avec support première page différente et logo
    */
   const createHeader = (
     headerContent: { left: string; center: string; right: string },
@@ -573,8 +624,18 @@ export function useExportPDFNative() {
       differentFirstPage: boolean
       headerEnabled: boolean
       headerContent: { left: string; center: string; right: string }
+    },
+    logoConfig?: {
+      includeLogo: boolean
+      logoPosition: 'left' | 'center' | 'right'
+      logoMaxHeight: number
     }
   ) => {
+    // Récupérer le logo du profil avocat
+    const profile = useLawyerProfileStore.getState()
+    const logo = profile.logo
+    const shouldIncludeLogo = logoConfig?.includeLogo && logo && profile.afficherLogoEntete
+
     return (currentPage: number, pageCount: number): PdfMakeContent => {
       if (currentPage === 1 && firstPageConfig?.differentFirstPage) {
         if (!firstPageConfig.headerEnabled) {
@@ -583,6 +644,48 @@ export function useExportPDFNative() {
         const left = replacePageVariables(firstPageConfig.headerContent.left, currentPage, pageCount, documentTitle, documentNumber)
         const center = replacePageVariables(firstPageConfig.headerContent.center, currentPage, pageCount, documentTitle, documentNumber)
         const right = replacePageVariables(firstPageConfig.headerContent.right, currentPage, pageCount, documentTitle, documentNumber)
+
+        // Construire le header avec logo si activé
+        if (shouldIncludeLogo) {
+          const logoElement = {
+            image: logo,
+            height: logoConfig?.logoMaxHeight || 50,
+            width: 'auto' as unknown as number,
+          } as PdfMakeContent
+
+          const textColumns: PdfMakeContent[] = [
+            { text: left, width: '*', alignment: 'left' as const, fontSize: 9 },
+            { text: center, width: 'auto', alignment: 'center' as const, fontSize: 9 },
+            { text: right, width: '*', alignment: 'right' as const, fontSize: 9 },
+          ]
+
+          if (logoConfig?.logoPosition === 'left') {
+            return {
+              margin: [40, 15, 40, 0],
+              columns: [
+                { ...logoElement, width: 80 },
+                { width: '*', columns: textColumns },
+              ],
+            }
+          } else if (logoConfig?.logoPosition === 'right') {
+            return {
+              margin: [40, 15, 40, 0],
+              columns: [
+                { width: '*', columns: textColumns },
+                { ...logoElement, width: 80, alignment: 'right' as const },
+              ],
+            }
+          } else {
+            // Center
+            return {
+              margin: [40, 15, 40, 0],
+              stack: [
+                { ...logoElement, alignment: 'center' as const },
+                { columns: textColumns, margin: [0, 5, 0, 0] },
+              ],
+            }
+          }
+        }
 
         return {
           margin: [40, 20, 40, 0],
@@ -600,6 +703,48 @@ export function useExportPDFNative() {
       const left = replacePageVariables(headerContent.left, currentPage, pageCount, documentTitle, documentNumber)
       const center = replacePageVariables(headerContent.center, currentPage, pageCount, documentTitle, documentNumber)
       const right = replacePageVariables(headerContent.right, currentPage, pageCount, documentTitle, documentNumber)
+
+      // Header avec logo pour les pages suivantes
+      if (shouldIncludeLogo) {
+        const logoElement = {
+          image: logo,
+          height: logoConfig?.logoMaxHeight || 50,
+          width: 'auto' as unknown as number,
+        } as PdfMakeContent
+
+        const textColumns: PdfMakeContent[] = [
+          { text: left, width: '*', alignment: 'left' as const, fontSize: 9, color: LEGAL_COLORS.lightGray },
+          { text: center, width: 'auto', alignment: 'center' as const, fontSize: 9, color: LEGAL_COLORS.mediumGray },
+          { text: right, width: '*', alignment: 'right' as const, fontSize: 9, color: LEGAL_COLORS.lightGray },
+        ]
+
+        if (logoConfig?.logoPosition === 'left') {
+          return {
+            margin: [40, 15, 40, 0],
+            columns: [
+              { ...logoElement, width: 80 },
+              { width: '*', columns: textColumns },
+            ],
+          }
+        } else if (logoConfig?.logoPosition === 'right') {
+          return {
+            margin: [40, 15, 40, 0],
+            columns: [
+              { width: '*', columns: textColumns },
+              { ...logoElement, width: 80, alignment: 'right' as const },
+            ],
+          }
+        } else {
+          // Center
+          return {
+            margin: [40, 15, 40, 0],
+            stack: [
+              { ...logoElement, alignment: 'center' as const },
+              { columns: textColumns, margin: [0, 5, 0, 0] },
+            ],
+          }
+        }
+      }
 
       return {
         margin: [40, 20, 40, 0],
@@ -665,6 +810,7 @@ export function useExportPDFNative() {
    * Exporte le document en PDF
    */
   const exportToPDF = async (documentId: string) => {
+    const { setExporting } = useEditorStore.getState()
     try {
       // Initialiser pdfmake de manière asynchrone
       const initialized = await initializePdfMake()
@@ -679,7 +825,8 @@ export function useExportPDFNative() {
         return
       }
 
-      const pageState = usePageStore.getState()
+      // Récupérer les paramètres d'export PDF personnalisés
+      const pdfSettings = usePdfExportSettingsStore.getState().getSettings()
 
       // Demander l'emplacement de sauvegarde
       const outputPath = await save({
@@ -689,13 +836,30 @@ export function useExportPDFNative() {
 
       if (!outputPath) return
 
+      // Auto-snapshot avant export
+      useVersionStore.getState().createVersion(documentId, 'Avant export PDF', doc.content, true)
+
+      setExporting(true, 'pdf')
+
       // Générer le numéro de document (incrémente le compteur)
       const documentNumber = useDocumentCounterStore.getState().getNextNumber()
 
       console.log('PDF Export: Starting conversion...')
 
+      // Créer le numéroteur si activé
+      const numberer = pdfSettings.headingNumbering.enabled
+        ? new HeadingNumberer(pdfSettings.headingNumbering)
+        : null
+
+      // Créer le convertisseur avec numérotation et couleurs personnalisées
+      const converter = createConverter(numberer, pdfSettings.typography.headingColors)
+
+      // Reset footnote collector before conversion
+      collectedFootnotes.length = 0
+      footnoteCounter = 0
+
       // Convertir le contenu en format pdfmake
-      const content = convertToPdfmake(doc.content)
+      const content = converter(doc.content)
       console.log('PDF Export: Content converted', content ? 'OK' : 'FAILED')
 
       if (!content) {
@@ -703,61 +867,138 @@ export function useExportPDFNative() {
         return
       }
 
+      // Append collected footnotes as a section at the end
+      if (collectedFootnotes.length > 0) {
+        const contentArray = Array.isArray(content) ? content : [content]
+        // Separator line
+        contentArray.push({
+          canvas: [{
+            type: 'line',
+            x1: 0,
+            y1: 0,
+            x2: 150,
+            y2: 0,
+            lineWidth: 0.5,
+            lineColor: LEGAL_COLORS.border,
+          }],
+          margin: [0, 16, 0, 8],
+        } as PdfMakeContent)
+        // Footnote entries
+        for (const fn of collectedFootnotes) {
+          contentArray.push({
+            text: [
+              { text: `${fn.number}. `, fontSize: 7, bold: true },
+              { text: fn.content, fontSize: 9 },
+            ],
+            margin: [0, 0, 0, 3],
+            color: LEGAL_COLORS.mediumGray,
+          } as PdfMakeContent)
+        }
+      }
+
       console.log('PDF Export: Creating document definition...')
 
-      // Utiliser les paramètres juridiques professionnels par défaut
-      // Garamond 12pt, interligne 1.2, justifié
-      const baseFontSize = LEGAL_DEFAULTS.fontSize
-      const lineHeight = LEGAL_DEFAULTS.lineHeight
+      // Utiliser les paramètres personnalisés ou les valeurs par défaut
+      const baseFontSize = pdfSettings.typography.baseFontSize
+      const lineHeight = pdfSettings.typography.lineHeight
 
-      // Déterminer la police disponible (Garamond si chargé, sinon Roboto)
-      const availableFont = getAvailableFont(pdfMake)
+      // Déterminer la police (préférence utilisateur ou fallback)
+      const preferredFont = pdfSettings.typography.fontFamily
+      const availableFont = preferredFont === 'Garamond' ? getAvailableFont(pdfMake) : 'Roboto'
       console.log('PDF Export: Using font:', availableFont)
+
+      // Convertir les marges de cm en points
+      const marginsInPoints = {
+        top: pdfSettings.pageLayout.margins.top * 28.35,
+        bottom: pdfSettings.pageLayout.margins.bottom * 28.35,
+        left: pdfSettings.pageLayout.margins.left * 28.35,
+        right: pdfSettings.pageLayout.margins.right * 28.35,
+      }
 
       // Créer la définition du document avec style juridique professionnel
       const docDefinition: PdfMakeDocDefinition = {
-        pageSize: pageState.pageFormat === 'custom' ? 'A4' : pageState.pageFormat,
-        pageOrientation: pageState.orientation,
+        pageSize: pdfSettings.pageLayout.format,
+        pageOrientation: pdfSettings.pageLayout.orientation,
         pageMargins: [
-          pageState.margins.left,
-          pageState.margins.top + (pageState.headerEnabled ? pageState.headerHeight : 0),
-          pageState.margins.right,
-          pageState.margins.bottom + (pageState.footerEnabled ? pageState.footerHeight : 0),
+          marginsInPoints.left,
+          marginsInPoints.top + (pdfSettings.headerFooter.headerEnabled ? 40 : 0),
+          marginsInPoints.right,
+          marginsInPoints.bottom + (pdfSettings.headerFooter.footerEnabled ? 40 : 0),
         ],
-        content: Array.isArray(content) ? content : [content],
+        content: (() => {
+          const baseContent = Array.isArray(content) ? content : [content]
+          if (!pdfSettings.includeTOC) return baseContent
+
+          // Generate TOC from headings
+          const tocEntries: PdfMakeContent[] = []
+          const scanForHeadings = (node: JSONContent) => {
+            if (node.type === 'heading' && node.attrs?.level && node.content) {
+              const text = node.content.map((c: JSONContent) => c.text || '').join('')
+              if (text.trim()) {
+                const level = node.attrs.level as number
+                tocEntries.push({
+                  text,
+                  fontSize: level === 1 ? 12 : level === 2 ? 11 : 10,
+                  bold: level <= 2,
+                  margin: [(level - 1) * 15, 2, 0, 2] as [number, number, number, number],
+                  color: '#1e40af',
+                })
+              }
+            }
+            if (node.content) {
+              for (const child of node.content) {
+                scanForHeadings(child)
+              }
+            }
+          }
+          if (doc.content.content) {
+            for (const node of doc.content.content) {
+              scanForHeadings(node)
+            }
+          }
+
+          if (tocEntries.length === 0) return baseContent
+
+          const tocSection: PdfMakeContent[] = [
+            { text: 'Table des matières', style: 'h1', margin: [0, 0, 0, 10] },
+            ...tocEntries,
+            { text: '', pageBreak: 'after' as const },
+          ]
+          return [...tocSection, ...baseContent]
+        })(),
         defaultStyle: {
-          font: availableFont, // Garamond si disponible, sinon Roboto
-          fontSize: baseFontSize, // 12pt - taille standard
-          lineHeight: lineHeight, // 1.2 - interligne compact professionnel
-          alignment: 'justify' as const, // Justifié - style français
+          font: availableFont,
+          fontSize: baseFontSize,
+          lineHeight: lineHeight,
+          alignment: 'justify' as const,
         },
         styles: {
-          // Styles de titres professionnels avec bleu foncé
+          // Styles de titres avec couleurs personnalisées
           h1: {
             fontSize: Math.round(baseFontSize * 1.75),
             bold: true,
-            color: LEGAL_COLORS.darkBlue,
+            color: pdfSettings.typography.headingColors.h1,
             margin: [0, LEGAL_DEFAULTS.headingSpacing.h1.before, 0, LEGAL_DEFAULTS.headingSpacing.h1.after],
             alignment: 'left' as const,
           },
           h2: {
             fontSize: Math.round(baseFontSize * 1.5),
             bold: true,
-            color: LEGAL_COLORS.darkBlue,
+            color: pdfSettings.typography.headingColors.h2,
             margin: [0, LEGAL_DEFAULTS.headingSpacing.h2.before, 0, LEGAL_DEFAULTS.headingSpacing.h2.after],
             alignment: 'left' as const,
           },
           h3: {
             fontSize: Math.round(baseFontSize * 1.25),
             bold: true,
-            color: LEGAL_COLORS.mediumBlue,
+            color: pdfSettings.typography.headingColors.h3,
             margin: [0, LEGAL_DEFAULTS.headingSpacing.h3.before, 0, LEGAL_DEFAULTS.headingSpacing.h3.after],
             alignment: 'left' as const,
           },
           h4: {
             fontSize: Math.round(baseFontSize * 1.08),
             bold: true,
-            color: LEGAL_COLORS.darkGray,
+            color: pdfSettings.typography.headingColors.h4,
             margin: [0, LEGAL_DEFAULTS.headingSpacing.h4.before, 0, LEGAL_DEFAULTS.headingSpacing.h4.after],
             alignment: 'left' as const,
           },
@@ -776,43 +1017,75 @@ export function useExportPDFNative() {
         },
       }
 
-      // Ajouter header si activé
-      if (pageState.headerEnabled || (pageState.firstPage.differentFirstPage && pageState.firstPage.headerEnabled)) {
+      // Ajouter header si activé (utiliser les paramètres PDF personnalisés)
+      if (pdfSettings.headerFooter.headerEnabled || pdfSettings.headerFooter.includeLogo) {
         docDefinition.header = createHeader(
-          pageState.headerContent,
+          pdfSettings.headerFooter.headerContent,
           doc.title,
           documentNumber,
           {
-            differentFirstPage: pageState.firstPage.differentFirstPage,
-            headerEnabled: pageState.firstPage.headerEnabled,
-            headerContent: pageState.firstPage.headerContent,
+            differentFirstPage: pdfSettings.headerFooter.firstPageDifferent,
+            headerEnabled: pdfSettings.headerFooter.firstPageHeaderEnabled,
+            headerContent: pdfSettings.headerFooter.headerContent,
+          },
+          {
+            includeLogo: pdfSettings.headerFooter.includeLogo,
+            logoPosition: pdfSettings.headerFooter.logoPosition,
+            logoMaxHeight: pdfSettings.headerFooter.logoMaxHeight,
           }
         )
       }
 
-      // Ajouter footer si activé
-      if (pageState.footerEnabled || (pageState.firstPage.differentFirstPage && pageState.firstPage.footerEnabled)) {
+      // Ajouter footer si activé (utiliser les paramètres PDF personnalisés)
+      if (pdfSettings.headerFooter.footerEnabled) {
         docDefinition.footer = createFooter(
-          pageState.footerContent,
+          pdfSettings.headerFooter.footerContent,
           doc.title,
           documentNumber,
           {
-            differentFirstPage: pageState.firstPage.differentFirstPage,
-            footerEnabled: pageState.firstPage.footerEnabled,
-            footerContent: pageState.firstPage.footerContent,
+            differentFirstPage: pdfSettings.headerFooter.firstPageDifferent,
+            footerEnabled: pdfSettings.headerFooter.firstPageFooterEnabled,
+            footerContent: pdfSettings.headerFooter.footerContent,
           }
         )
+      }
+
+      // Compress a base64 image via offscreen canvas
+      const compressImage = (dataUrl: string, maxWidth = 800, quality = 0.8): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image()
+          img.onload = () => {
+            const canvas = document.createElement('canvas')
+            let { width, height } = img
+            if (width > maxWidth) {
+              height = Math.round(height * (maxWidth / width))
+              width = maxWidth
+            }
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')
+            if (!ctx) {
+              resolve(dataUrl) // fallback
+              return
+            }
+            ctx.drawImage(img, 0, 0, width, height)
+            resolve(canvas.toDataURL('image/jpeg', quality))
+          }
+          img.onerror = () => resolve(dataUrl)
+          img.src = dataUrl
+        })
       }
 
       // Nettoyer le contenu pour éviter les problèmes
       const cleanContent = (items: PdfMakeContent[]): PdfMakeContent[] => {
         return items.map(item => {
-          // Supprimer les images problématiques (data URLs très longues ou URLs externes)
+          // Handle external images
           if (item.image) {
-            if (item.image.startsWith('http') || (item.image.length > 100000)) {
-              console.log('PDF Export: Skipping problematic image')
-              return { text: '[Image non exportée]', italics: true, color: '#999999' }
+            if (item.image.startsWith('http')) {
+              console.log('PDF Export: Skipping external image')
+              return { text: '[Image externe non exportée]', italics: true, color: '#999999' }
             }
+            // Large base64 images will be compressed asynchronously before this step
           }
           // Nettoyer récursivement
           if (item.stack && Array.isArray(item.stack)) {
@@ -826,6 +1099,26 @@ export function useExportPDFNative() {
           }
           return item
         }).filter(Boolean)
+      }
+
+      // Compress large base64 images before cleaning
+      const compressLargeImages = async (items: PdfMakeContent[]): Promise<void> => {
+        for (const item of items) {
+          if (item.image && item.image.startsWith('data:') && item.image.length > 100000) {
+            try {
+              item.image = await compressImage(item.image)
+              console.log('PDF Export: Compressed large image')
+            } catch {
+              console.log('PDF Export: Failed to compress image, using as-is')
+            }
+          }
+          if (item.stack && Array.isArray(item.stack)) await compressLargeImages(item.stack)
+          if (item.columns && Array.isArray(item.columns)) await compressLargeImages(item.columns)
+        }
+      }
+
+      if (Array.isArray(docDefinition.content)) {
+        await compressLargeImages(docDefinition.content)
       }
 
       const cleanedContent = Array.isArray(docDefinition.content)
@@ -889,6 +1182,8 @@ export function useExportPDFNative() {
     } catch (error) {
       console.error('Error exporting to PDF:', error)
       toast.error(`Erreur lors de l'export PDF: ${error}`)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -971,10 +1266,21 @@ export function useExportPDFNative() {
   }
 
   /**
-   * Crée un header avec l'en-tête du profil avocat
+   * Crée un header avec l'en-tête du profil avocat (cartouche professionnel)
+   *
+   * Utilise un tableau pdfmake avec 2 colonnes :
+   * - Colonne gauche : barre d'accent fine (3pt, bleu foncé #1a365d)
+   * - Colonne droite : informations du cabinet (nom, avocat, adresse, contact, barreau)
+   * Si le profil a un logo ET afficherLogoEntete est activé, le logo est ajouté
+   * comme petite image (40pt de haut) à gauche du texte.
    */
   const createLawyerProfileHeader = (marginLeft: number, marginRight: number) => {
     const profile = useLawyerProfileStore.getState()
+
+    const CARTOUCHE_DARK = '#1a365d'
+    const CARTOUCHE_TEXT = '#333333'
+    const CARTOUCHE_MUTED = '#666666'
+    const CARTOUCHE_LIGHT = '#888888'
 
     const fullName = [profile.civilite, profile.prenom, profile.nom].filter(Boolean).join(' ')
     const fullAddress = [
@@ -983,35 +1289,85 @@ export function useExportPDFNative() {
     ].filter(Boolean).join(', ')
 
     const contactLines: string[] = []
-    if (profile.telephone) contactLines.push(`Tél. ${profile.telephone}`)
+    if (profile.telephone) contactLines.push(`Tel. ${profile.telephone}`)
     if (profile.email) contactLines.push(profile.email)
 
-    const headerLines: PdfMakeContent[] = []
+    // Build the text stack for the cartouche
+    const textStack: PdfMakeContent[] = []
 
     if (profile.cabinet) {
-      headerLines.push({ text: profile.cabinet, bold: true, fontSize: 12 })
+      textStack.push({ text: profile.cabinet, bold: true, fontSize: 13, color: CARTOUCHE_DARK })
     }
     if (fullName) {
-      headerLines.push({ text: fullName, fontSize: 10 })
+      textStack.push({ text: fullName, fontSize: 10, color: CARTOUCHE_TEXT, margin: [0, 1, 0, 0] })
     }
     if (fullAddress) {
-      headerLines.push({ text: fullAddress, fontSize: 9, color: '#666666' })
+      textStack.push({ text: fullAddress, fontSize: 9, color: CARTOUCHE_MUTED, margin: [0, 1, 0, 0] })
     }
     if (contactLines.length > 0) {
-      headerLines.push({ text: contactLines.join(' – '), fontSize: 8, color: '#888888' })
+      textStack.push({ text: contactLines.join(' – '), fontSize: 8, color: CARTOUCHE_LIGHT, margin: [0, 1, 0, 0] })
     }
     if (profile.barreau) {
       const barreauLine = [
         `Barreau de ${profile.barreau}`,
         profile.numeroToque ? `Toque ${profile.numeroToque}` : ''
       ].filter(Boolean).join(' – ')
-      headerLines.push({ text: barreauLine, fontSize: 8, italics: true, color: '#888888' })
+      textStack.push({ text: barreauLine, fontSize: 8, italics: true, color: CARTOUCHE_LIGHT, margin: [0, 1, 0, 0] })
+    }
+
+    // Build the right column content: optionally logo + text
+    const showLogo = profile.logo && profile.afficherLogoEntete
+    let rightColumnContent: PdfMakeContent
+
+    if (showLogo) {
+      // Logo alongside text stack
+      rightColumnContent = {
+        columns: [
+          {
+            image: profile.logo as string,
+            width: 40,
+            margin: [0, 0, 8, 0],
+          },
+          {
+            stack: textStack,
+            width: '*',
+          },
+        ],
+      }
+    } else {
+      rightColumnContent = {
+        stack: textStack,
+      }
     }
 
     return (): PdfMakeContent => ({
-      margin: [marginLeft, 15, marginRight, 10],
-      stack: headerLines,
-      alignment: 'right' as const,
+      margin: [marginLeft, 12, marginRight, 8],
+      alignment: 'left' as const,
+      table: {
+        widths: [3, '*'],
+        body: [
+          [
+            {
+              text: '',
+              fillColor: CARTOUCHE_DARK,
+              margin: [0, 0, 0, 0],
+            } as PdfMakeContent,
+            {
+              ...rightColumnContent,
+              margin: [8, 2, 0, 2],
+            } as PdfMakeContent,
+          ],
+        ],
+      },
+      // @ts-expect-error pdfmake layout property not in our minimal type def
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: () => 0,
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
+      },
     })
   }
 
@@ -1178,6 +1534,7 @@ export function useExportPDFNative() {
     templateId: string | null,
     options?: { includeLetterhead?: boolean; includeSignature?: boolean }
   ) => {
+    const { setExporting } = useEditorStore.getState()
     try {
       // Initialiser pdfmake de manière asynchrone
       const initialized = await initializePdfMake()
@@ -1208,6 +1565,11 @@ export function useExportPDFNative() {
       })
 
       if (!outputPath) return
+
+      // Auto-snapshot avant export avec template
+      useVersionStore.getState().createVersion(documentId, 'Avant export PDF (template)', doc.content, true)
+
+      setExporting(true, 'pdf')
 
       // Générer le numéro de document (incrémente le compteur)
       const documentNumber = useDocumentCounterStore.getState().getNextNumber()
@@ -1251,6 +1613,8 @@ export function useExportPDFNative() {
     } catch (error) {
       console.error('Error exporting to PDF with template:', error)
       toast.error(`Erreur lors de l'export PDF: ${error}`)
+    } finally {
+      setExporting(false)
     }
   }
 

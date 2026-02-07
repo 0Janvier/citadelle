@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useFolderStore, FolderItem } from '../store/useFolderStore'
 import { useFileOperations } from '../hooks/useFileOperations'
+import { useToast } from '../hooks/useToast'
 import { open } from '@tauri-apps/api/dialog'
 
 // Flatten the tree into a navigable list (respecting expanded folders)
@@ -46,6 +47,7 @@ export function FolderSidebar() {
   } = useFolderStore()
 
   const { openFileFromPath } = useFileOperations()
+  const toast = useToast()
   const [isResizing, setIsResizing] = useState(false)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [isFocused, setIsFocused] = useState(false)
@@ -86,6 +88,7 @@ export function FolderSidebar() {
       }
     } catch (error) {
       console.error('Failed to select folder:', error)
+      toast.error('Impossible d\'ouvrir le dossier')
     }
   }
 
@@ -372,6 +375,7 @@ export function FolderSidebar() {
       await useFolderStore.getState().moveItem(sourceItem.path, newPath)
     } catch (error) {
       console.error('Failed to move item:', error)
+      toast.error('Impossible de déplacer l\'élément')
     }
   }
 

@@ -12,6 +12,7 @@ import { usePageStore } from '../../store/usePageStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
 import { PageBreakSeparator } from './PageBreakSeparator'
 import { PageStatusBar } from './PageStatusBar'
+import { LetterheadOverlay } from '../LetterheadOverlay'
 
 interface ContinuousPageViewProps {
   documentId: string
@@ -168,6 +169,9 @@ export function ContinuousPageView({ documentId, editor }: ContinuousPageViewPro
             position: 'relative',
           }}
         >
+          {/* Cartouche cabinet */}
+          <LetterheadOverlay />
+
           {/* Éditeur */}
           <div
             ref={editorWrapperRef}

@@ -39,7 +39,7 @@ export function SnippetFormDialog({
       setNom(snippet.nom)
       setDescription(snippet.description || '')
       setRaccourci(snippet.raccourci)
-      setContenu(snippet.contenu)
+      setContenu(typeof snippet.contenu === 'string' ? snippet.contenu : JSON.stringify(snippet.contenu))
       setCategory(snippet.category)
     } else {
       // Reset en mode création

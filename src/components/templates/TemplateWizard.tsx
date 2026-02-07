@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import type { JSONContent } from '@tiptap/react'
 
-interface WizardStep {
+export interface WizardStep {
   id: string
   title: string
   description?: string
   fields: WizardField[]
 }
 
-interface WizardField {
+export interface WizardField {
   key: string
   label: string
   type: 'text' | 'textarea' | 'select' | 'date' | 'number' | 'radio'

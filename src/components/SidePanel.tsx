@@ -2,7 +2,6 @@
 import { usePanelStore } from '../store/usePanelStore'
 import { ClauseLibrary } from './clauses/ClauseLibrary'
 import { VariablePanel } from './variables/VariablePanel'
-import { DeadlinePanel } from './deadlines/DeadlinePanel'
 import { CodeBrowser } from './codes/CodeBrowser'
 import { SignatureEditor } from './signature/SignatureEditor'
 import { OcrPanel } from './ocr/OcrPanel'
@@ -23,8 +22,6 @@ export function SidePanel() {
         return <ClauseLibrary onClose={closePanel} />
       case 'variables':
         return <VariablePanel onClose={closePanel} />
-      case 'deadlines':
-        return <DeadlinePanel onClose={closePanel} />
       case 'codes':
         return <CodeBrowser onClose={closePanel} />
       case 'signature':

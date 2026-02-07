@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { TabBar } from './components/TabBar'
 import { Editor } from './components/Editor'
 import { StatusBar } from './components/StatusBar'
@@ -8,9 +9,19 @@ import { ToastContainer } from './components/Toast'
 import { Settings } from './components/Settings'
 import { FindReplacePanel } from './components/FindReplacePanel'
 import { NewDocumentDialog } from './components/templates'
-import { UnifiedSidebar } from './components/UnifiedSidebar'
+import { SaveAsTemplateDialog } from './components/templates/SaveAsTemplateDialog'
+import { CompactSidebar } from './components/CompactSidebar'
 import { GlobalSearch } from './components/search/GlobalSearch'
 import { ProjectSearch } from './components/search/ProjectSearch'
+import { PdfExportSettingsDialog } from './components/PdfExportSettingsDialog'
+import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog'
+import { FootnoteEditor } from './components/footnotes/FootnoteEditor'
+import { RecoveryDialog } from './components/recovery/RecoveryDialog'
+import { ExportProgressOverlay } from './components/ExportProgressOverlay'
+import { WelcomeScreen, useShowWelcome } from './components/WelcomeScreen'
+import { CommentPanel } from './components/comments/CommentPanel'
+import { useCommentStore } from './store/useCommentStore'
+import { useLawyerProfileStore } from './store/useLawyerProfileStore'
 import { usePanelStore } from './store/usePanelStore'
 import { useDocumentStore } from './store/useDocumentStore'
 import { useEditorStore } from './store/useEditorStore'
@@ -20,29 +31,56 @@ import { useStyleStore } from './store/useStyleStore'
 import { useThemeStore } from './store/useThemeStore'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useNativeMenuEvents } from './hooks/useNativeMenuEvents'
+import { useToast } from './hooks/useToast'
 import { initUserDataDir } from './lib/templateStorage'
+import { appWindow } from '@tauri-apps/api/window'
+import { confirm } from '@tauri-apps/api/dialog'
 import type { JSONContent } from '@tiptap/react'
 
 function App() {
   const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
   const addDocument = useDocumentStore((state) => state.addDocument)
-  const isDistractionFree = useEditorStore((state) => state.isDistractionFree)
-  const zoomLevel = useEditorStore((state) => state.zoomLevel)
-  const settingsOpen = useEditorStore((state) => state.settingsOpen)
-  const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
-  const projectSearchOpen = useEditorStore((state) => state.projectSearchOpen)
-  const setProjectSearchOpen = useEditorStore((state) => state.setProjectSearchOpen)
-  const sidebarVisible = useFolderStore((state) => state.sidebarVisible)
-  const toggleSidebar = useFolderStore((state) => state.toggleSidebar)
-  const refreshFolder = useFolderStore((state) => state.refreshFolder)
+
+  const {
+    isDistractionFree, zoomLevel,
+    settingsOpen, setSettingsOpen,
+    projectSearchOpen, setProjectSearchOpen,
+    pdfExportSettingsOpen, setPdfExportSettingsOpen,
+  } = useEditorStore(useShallow((state) => ({
+    isDistractionFree: state.isDistractionFree,
+    zoomLevel: state.zoomLevel,
+    settingsOpen: state.settingsOpen,
+    setSettingsOpen: state.setSettingsOpen,
+    projectSearchOpen: state.projectSearchOpen,
+    setProjectSearchOpen: state.setProjectSearchOpen,
+    pdfExportSettingsOpen: state.pdfExportSettingsOpen,
+    setPdfExportSettingsOpen: state.setPdfExportSettingsOpen,
+  })))
+
+  const { sidebarVisible, toggleSidebar, refreshFolder } = useFolderStore(useShallow((state) => ({
+    sidebarVisible: state.sidebarVisible,
+    toggleSidebar: state.toggleSidebar,
+    refreshFolder: state.refreshFolder,
+  })))
 
   // Template system stores
   const loadTemplates = useTemplateStore((state) => state.loadTemplates)
   const loadStyles = useStyleStore((state) => state.loadStyles)
   const loadThemes = useThemeStore((state) => state.loadThemes)
 
-  // New document dialog state
+  const toast = useToast()
+
+  // Welcome screen for first-time users
+  const [showWelcome, dismissWelcome] = useShowWelcome()
+
+  // Loading state
+  const [isRestoring, setIsRestoring] = useState(true)
+
+  // Dialog states
   const [showNewDocDialog, setShowNewDocDialog] = useState(false)
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false)
+  const shortcutsDialogOpen = useEditorStore((state) => state.shortcutsDialogOpen)
+  const setShortcutsDialogOpen = useEditorStore((state) => state.setShortcutsDialogOpen)
 
   // Panel store for advanced features
   const activePanel = usePanelStore((state) => state.activePanel)
@@ -53,6 +91,39 @@ function App() {
 
   // Enable native macOS menu events
   useNativeMenuEvents()
+
+  // Listen for show-new-doc-dialog and save-as-template events
+  useEffect(() => {
+    const showNewDoc = () => setShowNewDocDialog(true)
+    const showSaveTemplate = () => setShowSaveAsTemplate(true)
+    window.addEventListener('show-new-doc-dialog', showNewDoc)
+    window.addEventListener('show-save-as-template', showSaveTemplate)
+    return () => {
+      window.removeEventListener('show-new-doc-dialog', showNewDoc)
+      window.removeEventListener('show-save-as-template', showSaveTemplate)
+    }
+  }, [])
+
+  // Confirm before closing window with unsaved documents
+  useEffect(() => {
+    const unlisten = appWindow.onCloseRequested(async (event) => {
+      const docs = useDocumentStore.getState().documents
+      const hasUnsaved = docs.some(d => d.isDirty)
+      if (hasUnsaved) {
+        const confirmed = await confirm(
+          'Des documents non sauvegardés seront perdus. Quitter ?',
+          { title: 'Citadelle', type: 'warning' }
+        )
+        if (!confirmed) {
+          event.preventDefault()
+          return
+        }
+      }
+      // Save session before closing
+      await useDocumentStore.getState().saveSession()
+    })
+    return () => { unlisten.then(fn => fn()) }
+  }, [])
 
   // Initialize template system on mount
   useEffect(() => {
@@ -66,6 +137,7 @@ function App() {
         ])
       } catch (err) {
         console.error('Failed to initialize template system:', err)
+        toast.error('Erreur lors de l\'initialisation des modèles')
       }
     }
     initTemplateSystem()
@@ -102,10 +174,13 @@ function App() {
         if (currentDocs.length === 0) {
           addDocument()
         }
+      }).finally(() => {
+        setIsRestoring(false)
       })
     } else {
       // Create initial document if restore is disabled
       addDocument()
+      setIsRestoring(false)
     }
 
     // Restore folder sidebar if a root path was persisted
@@ -118,6 +193,7 @@ function App() {
         }
       } catch (e) {
         console.error('Failed to restore folder:', e)
+        toast.error('Impossible de restaurer le dossier')
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -134,6 +210,22 @@ function App() {
       saveSession()
     }
   }, [saveSession])
+
+  if (isRestoring) {
+    return (
+      <div className="h-screen w-screen bg-[var(--bg)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="text-2xl font-bold text-[var(--text)]">Citadelle</div>
+          <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+            </svg>
+            Restauration de la session...
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -191,8 +283,11 @@ function App() {
           <StatusBar />
         </div>
 
-        {/* Sidebar unifiée avec onglets verticaux */}
-        <UnifiedSidebar />
+        {/* Sidebar compacte avec overlays */}
+        {!isDistractionFree && <CompactSidebar />}
+
+        {/* Comment Panel */}
+        <CommentPanelSidebar documentId={activeDocumentId} />
       </div>
 
       <CommandPalette />
@@ -203,6 +298,10 @@ function App() {
         onClose={() => setShowNewDocDialog(false)}
         onCreateDocument={handleCreateFromTemplate}
       />
+      <SaveAsTemplateDialog
+        isOpen={showSaveAsTemplate}
+        onClose={() => setShowSaveAsTemplate(false)}
+      />
       <GlobalSearch
         isOpen={activePanel === 'search'}
         onClose={closePanel}
@@ -210,6 +309,63 @@ function App() {
       <ProjectSearch
         isOpen={projectSearchOpen}
         onClose={() => setProjectSearchOpen(false)}
+      />
+      <PdfExportSettingsDialog
+        isOpen={pdfExportSettingsOpen}
+        onClose={() => setPdfExportSettingsOpen(false)}
+      />
+      <KeyboardShortcutsDialog
+        open={shortcutsDialogOpen}
+        onClose={() => setShortcutsDialogOpen(false)}
+      />
+      <FootnoteEditor />
+      <RecoveryDialog />
+      <ExportProgressOverlay />
+      {showWelcome && <WelcomeScreen onDismiss={dismissWelcome} />}
+    </div>
+  )
+}
+
+function CommentPanelSidebar({ documentId }: { documentId: string | null }) {
+  const showPanel = useCommentStore((s) => s.showPanel)
+  const setShowPanel = useCommentStore((s) => s.setShowPanel)
+  const comments = useCommentStore((s) => s.comments)
+  const addComment = useCommentStore((s) => s.addComment)
+  const resolveComment = useCommentStore((s) => s.resolveComment)
+  const deleteComment = useCommentStore((s) => s.deleteComment)
+  const replyToComment = useCommentStore((s) => s.replyToComment)
+
+  const activeEditor = useEditorStore((s) => s.activeEditor)
+
+  if (!showPanel || !documentId) return null
+
+  const docComments = comments.filter((c) => c.documentId === documentId)
+  const selection = activeEditor
+    ? { from: activeEditor.state.selection.from, to: activeEditor.state.selection.to }
+    : null
+  const hasSelection = selection && selection.from !== selection.to
+
+  return (
+    <div className="w-80 border-l border-[var(--border)] bg-[var(--bg)] shrink-0 overflow-hidden">
+      <CommentPanel
+        comments={docComments}
+        onAddComment={(content, from, to) => {
+          const profile = useLawyerProfileStore.getState()
+          const author = [profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Auteur'
+          const commentId = addComment(documentId, author, content, from, to)
+          if (activeEditor) {
+            activeEditor.chain().focus().setComment(commentId).run()
+          }
+        }}
+        onResolveComment={resolveComment}
+        onDeleteComment={deleteComment}
+        onReplyComment={(parentId, content) => {
+          const profile = useLawyerProfileStore.getState()
+          const author = [profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Auteur'
+          replyToComment(parentId, author, content)
+        }}
+        selectedRange={hasSelection ? selection : null}
+        onClose={() => setShowPanel(false)}
       />
     </div>
   )

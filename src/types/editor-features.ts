@@ -127,63 +127,12 @@ export interface Snippet {
   nom: string
   description?: string
   raccourci: string             // Ex: "/plaise"
-  contenu: string               // Texte brut ou avec variables
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contenu: string | Record<string, any> // Texte brut, variables, ou TipTap JSON
   category: SnippetCategory
   variables: string[]           // Variables utilisées (ex: ["client.nom"])
   isBuiltin: boolean
   usageCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-// ============================================================================
-// Délais de Procédure
-// ============================================================================
-
-export type DelaiType =
-  | 'jours_calendaires'
-  | 'jours_ouvres'
-  | 'jours_francs'
-  | 'mois'
-  | 'annees'
-
-export type DelaiProcedure =
-  | 'appel'
-  | 'pourvoi'
-  | 'opposition'
-  | 'recours_gracieux'
-  | 'recours_contentieux'
-  | 'conclusions'
-  | 'assignation'
-  | 'signification'
-  | 'prescription'
-  | 'custom'
-
-export const DELAI_PROCEDURE_LABELS: Record<DelaiProcedure, string> = {
-  appel: 'Appel',
-  pourvoi: 'Pourvoi en cassation',
-  opposition: 'Opposition',
-  recours_gracieux: 'Recours gracieux',
-  recours_contentieux: 'Recours contentieux',
-  conclusions: 'Conclusions',
-  assignation: 'Assignation',
-  signification: 'Signification',
-  prescription: 'Prescription',
-  custom: 'Personnalisé',
-}
-
-export interface Deadline {
-  id: string
-  titre: string
-  description?: string
-  type: DelaiProcedure
-  dateDebut: string             // ISO date
-  duree: number
-  unite: DelaiType
-  dateEcheance: string          // Calculée automatiquement
-  documentId?: string           // Lié à un document
-  rappels: number[]             // Jours avant échéance (ex: [7, 3, 1])
-  complete: boolean
   createdAt: string
   updatedAt: string
 }
@@ -204,6 +153,7 @@ export interface Comment {
     to: number
   }
   status: CommentStatus
+  resolved: boolean             // Quick boolean for filtering (mirrors status === 'resolved')
   parentId?: string             // Pour les réponses
   createdAt: string
   updatedAt: string

@@ -32,6 +32,7 @@ interface SettingsStore {
   wordWrap: boolean
   autoSave: boolean
   autoSaveInterval: number
+  spellcheckEnabled: boolean
 
   // Typewriter mode
   typewriterMode: boolean
@@ -48,6 +49,9 @@ interface SettingsStore {
   // Highlight color
   highlightColor: HighlightColor
 
+  // Editor letterhead
+  afficherCartoucheEditeur: boolean
+
   // Setters
   setFontSize: (size: number) => void
   setFontFamily: (family: string) => void
@@ -58,10 +62,12 @@ interface SettingsStore {
   setWordWrap: (wrap: boolean) => void
   setAutoSave: (enabled: boolean) => void
   setAutoSaveInterval: (interval: number) => void
+  setSpellcheck: (enabled: boolean) => void
   setRecentFilesCount: (count: number) => void
   setConfirmTabClose: (confirm: boolean) => void
   setRestoreSession: (restore: boolean) => void
   setHighlightColor: (color: HighlightColor) => void
+  setAfficherCartoucheEditeur: (show: boolean) => void
 
   // Typewriter setters
   setTypewriterMode: (enabled: boolean) => void
@@ -104,6 +110,7 @@ export const useSettingsStore = create<SettingsStore>()(
       wordWrap: true,
       autoSave: true,
       autoSaveInterval: 3000, // 3 seconds
+      spellcheckEnabled: true,
 
       // Typewriter mode
       typewriterMode: false,
@@ -120,6 +127,9 @@ export const useSettingsStore = create<SettingsStore>()(
       // Highlight color
       highlightColor: 'yellow' as HighlightColor,
 
+      // Editor letterhead
+      afficherCartoucheEditeur: true,
+
       // Setters
       setFontSize: (size) => set({ fontSize: Math.max(10, Math.min(24, size)) }),
       setFontFamily: (family) => set({ fontFamily: family }),
@@ -134,11 +144,13 @@ export const useSettingsStore = create<SettingsStore>()(
       setAutoSave: (enabled) => set({ autoSave: enabled }),
       setAutoSaveInterval: (interval) =>
         set({ autoSaveInterval: Math.max(1000, interval) }),
+      setSpellcheck: (enabled) => set({ spellcheckEnabled: enabled }),
       setRecentFilesCount: (count) =>
         set({ recentFilesCount: Math.max(5, Math.min(50, count)) }),
       setConfirmTabClose: (confirm) => set({ confirmTabClose: confirm }),
       setRestoreSession: (restore) => set({ restoreSession: restore }),
       setHighlightColor: (color) => set({ highlightColor: color }),
+      setAfficherCartoucheEditeur: (show) => set({ afficherCartoucheEditeur: show }),
 
       // Typewriter setters
       setTypewriterMode: (enabled) => set({ typewriterMode: enabled }),
@@ -177,6 +189,7 @@ export const useSettingsStore = create<SettingsStore>()(
           wordWrap: true,
           autoSave: true,
           autoSaveInterval: 3000,
+          spellcheckEnabled: true,
           typewriterMode: false,
           typewriterDimOpacity: 0.4,
           typewriterHighlightStyle: 'paragraph' as TypewriterHighlightStyle,
@@ -186,6 +199,7 @@ export const useSettingsStore = create<SettingsStore>()(
           confirmTabClose: true,
           restoreSession: true,
           highlightColor: 'yellow' as HighlightColor,
+          afficherCartoucheEditeur: true,
         })
         applyTheme('auto')
       },

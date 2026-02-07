@@ -92,7 +92,7 @@ export function GlobalSearch({ isOpen, onClose, onSelectDocument }: GlobalSearch
             id: snippet.id,
             type: 'snippet',
             titre: `${snippet.nom} (${snippet.raccourci})`,
-            extrait: highlightMatch(snippet.contenu, query),
+            extrait: highlightMatch(typeof snippet.contenu === 'string' ? snippet.contenu : snippet.nom, query),
             score: raccourciMatch ? 95 : nameMatch ? 85 : 35,
             createdAt: snippet.createdAt,
           })

@@ -103,7 +103,8 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
-        "titleBarStyle": "Overlay"
+        "visible": true,
+        "center": true
       }
     ]
   }

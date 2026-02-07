@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useEditorStore } from '../store/useEditorStore'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -7,24 +8,36 @@ import { usePiecesStore } from '../store/usePiecesStore'
 import { useTocStore } from '../store/useTocStore'
 import { usePageStore } from '../store/usePageStore'
 import { usePanelStore } from '../store/usePanelStore'
+import { useCommentStore } from '../store/useCommentStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { useFileOperations } from './useFileOperations'
+import { usePrint } from './usePrint'
 import { open } from '@tauri-apps/api/dialog'
+import { handleError } from '../lib/errorHandler'
 
 export function useKeyboardShortcuts() {
-  const addDocument = useDocumentStore((state) => state.addDocument)
-  const removeDocument = useDocumentStore((state) => state.removeDocument)
-  const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
-  const documents = useDocumentStore((state) => state.documents)
-  const setActiveDocument = useDocumentStore((state) => state.setActiveDocument)
+  const { addDocument, removeDocument, activeDocumentId, documents, setActiveDocument } =
+    useDocumentStore(useShallow((state) => ({
+      addDocument: state.addDocument,
+      removeDocument: state.removeDocument,
+      activeDocumentId: state.activeDocumentId,
+      documents: state.documents,
+      setActiveDocument: state.setActiveDocument,
+    })))
 
-  const toggleDistractionFree = useEditorStore((state) => state.toggleDistractionFree)
-  const increaseZoom = useEditorStore((state) => state.increaseZoom)
-  const decreaseZoom = useEditorStore((state) => state.decreaseZoom)
-  const resetZoom = useEditorStore((state) => state.resetZoom)
-  const findDialogOpen = useEditorStore((state) => state.findDialogOpen)
-  const setFindDialogOpen = useEditorStore((state) => state.setFindDialogOpen)
-  const setShowReplace = useEditorStore((state) => state.setShowReplace)
+  const {
+    toggleDistractionFree, increaseZoom, decreaseZoom, resetZoom,
+    findDialogOpen, setFindDialogOpen, setShowReplace, setProjectSearchOpen,
+  } = useEditorStore(useShallow((state) => ({
+    toggleDistractionFree: state.toggleDistractionFree,
+    increaseZoom: state.increaseZoom,
+    decreaseZoom: state.decreaseZoom,
+    resetZoom: state.resetZoom,
+    findDialogOpen: state.findDialogOpen,
+    setFindDialogOpen: state.setFindDialogOpen,
+    setShowReplace: state.setShowReplace,
+    setProjectSearchOpen: state.setProjectSearchOpen,
+  })))
 
   const toggleTheme = useSettingsStore((state) => state.toggleTheme)
   const toggleTypewriterMode = useSettingsStore((state) => state.toggleTypewriterMode)
@@ -34,15 +47,16 @@ export function useKeyboardShortcuts() {
   const toggleViewMode = usePageStore((state) => state.toggleViewMode)
 
   // Panel store for sidebar panels
-  const activePanel = usePanelStore((state) => state.activePanel)
-  const openPanel = usePanelStore((state) => state.openPanel)
-  const closePanel = usePanelStore((state) => state.closePanel)
+  const { activePanel, openPanel, closePanel } = usePanelStore(useShallow((state) => ({
+    activePanel: state.activePanel,
+    openPanel: state.openPanel,
+    closePanel: state.closePanel,
+  })))
 
   // Project store
   const openProject = useProjectStore((state) => state.openProject)
-  const setProjectSearchOpen = useEditorStore((state) => state.setProjectSearchOpen)
 
-  const togglePanel = (panel: 'clauses' | 'variables' | 'codes' | 'deadlines' | 'terms' | 'settings') => {
+  const togglePanel = (panel: 'clauses' | 'variables' | 'codes' | 'terms' | 'settings' | 'versions') => {
     if (activePanel === panel) {
       closePanel()
     } else {
@@ -51,7 +65,7 @@ export function useKeyboardShortcuts() {
   }
 
   // Ouvrir un dossier comme projet
-  const openProjectFolder = async () => {
+  const openProjectFolder = useCallback(async () => {
     try {
       const selected = await open({
         directory: true,
@@ -63,43 +77,86 @@ export function useKeyboardShortcuts() {
         await openProject(selected)
       }
     } catch (error) {
-      console.error('Failed to open project folder:', error)
+      handleError(error, 'Ouverture du dossier projet')
     }
-  }
+  }, [openProject])
 
   const { openFile, saveFile, saveFileAs } = useFileOperations()
+  const { printDocument } = usePrint()
+
+  // Refs-based pattern: store all callbacks and reactive state in refs
+  // so the useEffect keydown handler never needs to re-register.
+  const callbacksRef = useRef<Record<string, (...args: any[]) => void>>({})
+  callbacksRef.current = {
+    addDocument,
+    removeDocument,
+    setActiveDocument,
+    toggleDistractionFree,
+    toggleTypewriterMode,
+    toggleViewMode,
+    toggleSidebar,
+    togglePiecesPanel,
+    toggleTocPanel,
+    togglePanel,
+    openPanel,
+    closePanel,
+    increaseZoom,
+    decreaseZoom,
+    resetZoom,
+    setFindDialogOpen,
+    setShowReplace,
+    setProjectSearchOpen,
+    toggleTheme,
+    openFile,
+    saveFile,
+    saveFileAs,
+    openProjectFolder,
+    printDocument,
+  }
+
+  const stateRef = useRef({ activeDocumentId, documents, activePanel, findDialogOpen })
+  stateRef.current = { activeDocumentId, documents, activePanel, findDialogOpen }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
+      const cb = callbacksRef.current
+      const st = stateRef.current
 
-      // Cmd/Ctrl + N: New document
+      // Cmd/Ctrl + N: New document (open template dialog)
       if (cmdOrCtrl && e.key === 'n') {
         e.preventDefault()
-        addDocument()
+        window.dispatchEvent(new CustomEvent('show-new-doc-dialog'))
+        return
+      }
+
+      // Cmd/Ctrl + Shift + T: Save as template
+      if (cmdOrCtrl && e.shiftKey && e.key === 't') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('show-save-as-template'))
         return
       }
 
       // Cmd/Ctrl + O: Open file
       if (cmdOrCtrl && e.key === 'o' && !e.shiftKey) {
         e.preventDefault()
-        openFile()
+        cb.openFile()
         return
       }
 
       // Cmd/Ctrl + Shift + O: Open project folder
       if (cmdOrCtrl && e.shiftKey && e.key === 'O') {
         e.preventDefault()
-        openProjectFolder()
+        cb.openProjectFolder()
         return
       }
 
       // Cmd/Ctrl + S: Save file
       if (cmdOrCtrl && e.key === 's' && !e.shiftKey) {
         e.preventDefault()
-        if (activeDocumentId) {
-          saveFile(activeDocumentId)
+        if (st.activeDocumentId) {
+          cb.saveFile(st.activeDocumentId)
         }
         return
       }
@@ -107,8 +164,17 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Shift + S: Save As
       if (cmdOrCtrl && e.shiftKey && e.key === 'S') {
         e.preventDefault()
-        if (activeDocumentId) {
-          saveFileAs(activeDocumentId)
+        if (st.activeDocumentId) {
+          cb.saveFileAs(st.activeDocumentId)
+        }
+        return
+      }
+
+      // Cmd/Ctrl + P: Print document
+      if (cmdOrCtrl && e.key === 'p' && !e.shiftKey) {
+        e.preventDefault()
+        if (st.activeDocumentId) {
+          cb.printDocument(st.activeDocumentId)
         }
         return
       }
@@ -116,64 +182,71 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + W: Close active tab
       if (cmdOrCtrl && e.key === 'w') {
         e.preventDefault()
-        if (activeDocumentId) {
-          const doc = documents.find((d) => d.id === activeDocumentId)
+        if (st.activeDocumentId) {
+          const doc = st.documents.find((d) => d.id === st.activeDocumentId)
           if (doc?.isDirty) {
             const confirmed = window.confirm(
               `Le document "${doc.title}" contient des modifications non sauvegardées. Voulez-vous vraiment le fermer ?`
             )
             if (!confirmed) return
           }
-          removeDocument(activeDocumentId)
+          cb.removeDocument(st.activeDocumentId)
         }
+        return
+      }
+
+      // Cmd/Ctrl + /: Open keyboard shortcuts dialog
+      if (cmdOrCtrl && e.key === '/') {
+        e.preventDefault()
+        useEditorStore.getState().setShortcutsDialogOpen(true)
         return
       }
 
       // Cmd/Ctrl + ,: Open settings panel
       if (cmdOrCtrl && e.key === ',') {
         e.preventDefault()
-        togglePanel('settings')
+        cb.togglePanel('settings')
         return
       }
 
       // Cmd/Ctrl + \: Toggle sidebar
       if (cmdOrCtrl && e.key === '\\') {
         e.preventDefault()
-        toggleSidebar()
+        cb.toggleSidebar()
         return
       }
 
       // Cmd/Ctrl + F: Find in document
       if (cmdOrCtrl && e.key === 'f' && !e.shiftKey) {
         e.preventDefault()
-        setFindDialogOpen(true)
+        cb.setFindDialogOpen(true)
         return
       }
 
       // Cmd/Ctrl + Shift + F: Find in project
       if (cmdOrCtrl && e.shiftKey && e.key === 'F') {
         e.preventDefault()
-        setProjectSearchOpen(true)
+        cb.setProjectSearchOpen(true)
         return
       }
 
       // Cmd/Ctrl + H: Find and Replace
       if (cmdOrCtrl && e.key === 'h') {
         e.preventDefault()
-        setFindDialogOpen(true)
-        setShowReplace(true)
+        cb.setFindDialogOpen(true)
+        cb.setShowReplace(true)
         return
       }
 
       // Escape: Close find dialog
-      if (e.key === 'Escape' && findDialogOpen) {
+      if (e.key === 'Escape' && st.findDialogOpen) {
         e.preventDefault()
-        setFindDialogOpen(false)
+        cb.setFindDialogOpen(false)
         return
       }
 
       // Cmd/Ctrl + G: Next match (when find dialog is open)
-      if (cmdOrCtrl && e.key === 'g' && !e.shiftKey && findDialogOpen) {
+      if (cmdOrCtrl && e.key === 'g' && !e.shiftKey && st.findDialogOpen) {
         e.preventDefault()
         // The FindReplacePanel handles this internally via its own event listener
         // Dispatch a custom event that the panel can listen to
@@ -184,10 +257,10 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Shift + G: Previous match (when find dialog is open) or Toggle glossary
       if (cmdOrCtrl && e.shiftKey && e.key === 'G') {
         e.preventDefault()
-        if (findDialogOpen) {
+        if (st.findDialogOpen) {
           window.dispatchEvent(new CustomEvent('find-previous'))
         } else {
-          togglePanel('terms')
+          cb.togglePanel('terms')
         }
         return
       }
@@ -195,101 +268,115 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + T: Toggle theme
       if (cmdOrCtrl && e.key === 't') {
         e.preventDefault()
-        toggleTheme()
+        cb.toggleTheme()
         return
       }
 
       // Cmd/Ctrl + Shift + T: Toggle typewriter mode
       if (cmdOrCtrl && e.shiftKey && e.key === 'T') {
         e.preventDefault()
-        toggleTypewriterMode()
+        cb.toggleTypewriterMode()
         return
       }
 
       // Cmd/Ctrl + Shift + D: Toggle distraction-free mode
       if (cmdOrCtrl && e.shiftKey && e.key === 'D') {
         e.preventDefault()
-        toggleDistractionFree()
+        cb.toggleDistractionFree()
         return
       }
 
       // Cmd/Ctrl + Shift + L: Toggle page view mode
       if (cmdOrCtrl && e.shiftKey && e.key === 'L') {
         e.preventDefault()
-        toggleViewMode()
+        cb.toggleViewMode()
         return
       }
 
-      // Cmd/Ctrl + Shift + P: Toggle pieces panel
-      if (cmdOrCtrl && e.shiftKey && e.key === 'P') {
+      // Cmd/Ctrl + Shift + J: Toggle pieces panel
+      if (cmdOrCtrl && e.shiftKey && e.key === 'J') {
         e.preventDefault()
-        togglePiecesPanel()
+        cb.togglePiecesPanel()
         return
       }
 
       // Cmd/Ctrl + Shift + M: Toggle TOC panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'M') {
         e.preventDefault()
-        toggleTocPanel()
+        cb.toggleTocPanel()
         return
       }
 
       // Cmd/Ctrl + Shift + C: Toggle Clauses panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'C') {
         e.preventDefault()
-        togglePanel('clauses')
+        cb.togglePanel('clauses')
         return
       }
 
       // Cmd/Ctrl + Shift + V: Toggle Variables panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'V') {
         e.preventDefault()
-        togglePanel('variables')
+        cb.togglePanel('variables')
         return
       }
 
       // Cmd/Ctrl + Shift + K: Toggle Codes panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'K') {
         e.preventDefault()
-        togglePanel('codes')
+        cb.togglePanel('codes')
         return
       }
 
-      // Cmd/Ctrl + Shift + E: Toggle Deadlines panel
-      if (cmdOrCtrl && e.shiftKey && e.key === 'E') {
+      // Cmd/Ctrl + Shift + H: Toggle Versions panel
+      if (cmdOrCtrl && e.shiftKey && e.key === 'H') {
         e.preventDefault()
-        togglePanel('deadlines')
+        cb.togglePanel('versions')
+        return
+      }
+
+      // Cmd/Ctrl + Shift + .: Reopen last panel
+      if (cmdOrCtrl && e.shiftKey && e.key === '>') {
+        e.preventDefault()
+        usePanelStore.getState().reopenLastPanel()
+        return
+      }
+
+      // Cmd/Ctrl + Alt + C: Toggle comment panel
+      if (cmdOrCtrl && e.altKey && e.key === 'c') {
+        e.preventDefault()
+        useCommentStore.getState().togglePanel()
         return
       }
 
       // Cmd/Ctrl + =: Zoom in
       if (cmdOrCtrl && (e.key === '=' || e.key === '+')) {
         e.preventDefault()
-        increaseZoom()
+        cb.increaseZoom()
         return
       }
 
       // Cmd/Ctrl + -: Zoom out
       if (cmdOrCtrl && e.key === '-') {
         e.preventDefault()
-        decreaseZoom()
+        cb.decreaseZoom()
         return
       }
 
       // Cmd/Ctrl + 0: Reset zoom
       if (cmdOrCtrl && e.key === '0') {
         e.preventDefault()
-        resetZoom()
+        cb.resetZoom()
         return
       }
 
       // Cmd/Ctrl + Tab: Next tab
       if (cmdOrCtrl && e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault()
-        const currentIndex = documents.findIndex((doc) => doc.id === activeDocumentId)
-        const nextIndex = (currentIndex + 1) % documents.length
-        if (documents[nextIndex]) {
-          setActiveDocument(documents[nextIndex].id)
+        const currentIndex = st.documents.findIndex((doc) => doc.id === st.activeDocumentId)
+        const nextIndex = (currentIndex + 1) % st.documents.length
+        if (st.documents[nextIndex]) {
+          cb.setActiveDocument(st.documents[nextIndex].id)
         }
         return
       }
@@ -297,10 +384,10 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Shift + Tab: Previous tab
       if (cmdOrCtrl && e.shiftKey && e.key === 'Tab') {
         e.preventDefault()
-        const currentIndex = documents.findIndex((doc) => doc.id === activeDocumentId)
-        const prevIndex = (currentIndex - 1 + documents.length) % documents.length
-        if (documents[prevIndex]) {
-          setActiveDocument(documents[prevIndex].id)
+        const currentIndex = st.documents.findIndex((doc) => doc.id === st.activeDocumentId)
+        const prevIndex = (currentIndex - 1 + st.documents.length) % st.documents.length
+        if (st.documents[prevIndex]) {
+          cb.setActiveDocument(st.documents[prevIndex].id)
         }
         return
       }
@@ -309,8 +396,8 @@ export function useKeyboardShortcuts() {
       if (cmdOrCtrl && /^[1-9]$/.test(e.key)) {
         e.preventDefault()
         const index = parseInt(e.key) - 1
-        if (documents[index]) {
-          setActiveDocument(documents[index].id)
+        if (st.documents[index]) {
+          cb.setActiveDocument(st.documents[index].id)
         }
         return
       }
@@ -318,33 +405,6 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    addDocument,
-    removeDocument,
-    activeDocumentId,
-    documents,
-    setActiveDocument,
-    toggleDistractionFree,
-    toggleTypewriterMode,
-    toggleViewMode,
-    toggleSidebar,
-    togglePiecesPanel,
-    toggleTocPanel,
-    togglePanel,
-    activePanel,
-    openPanel,
-    closePanel,
-    increaseZoom,
-    decreaseZoom,
-    resetZoom,
-    findDialogOpen,
-    setFindDialogOpen,
-    setShowReplace,
-    toggleTheme,
-    openFile,
-    saveFile,
-    saveFileAs,
-    openProjectFolder,
-    setProjectSearchOpen,
-  ])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 }

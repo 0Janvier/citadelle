@@ -12,6 +12,7 @@ interface TemplateGalleryProps {
 
 const CATEGORY_OPTIONS: Array<{ value: TemplateCategory | 'all'; label: string }> = [
   { value: 'all', label: 'Tous' },
+  { value: 'legal', label: TEMPLATE_CATEGORY_LABELS.legal },
   { value: 'writing', label: TEMPLATE_CATEGORY_LABELS.writing },
   { value: 'business', label: TEMPLATE_CATEGORY_LABELS.business },
   { value: 'academic', label: TEMPLATE_CATEGORY_LABELS.academic },

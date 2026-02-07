@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Command } from 'cmdk'
 import { useEditorStore } from '../store/useEditorStore'
 import { useDocumentStore } from '../store/useDocumentStore'
@@ -6,8 +6,14 @@ import { useSettingsStore } from '../store/useSettingsStore'
 import { useRecentFilesStore } from '../store/useRecentFilesStore'
 import { usePiecesStore } from '../store/usePiecesStore'
 import { useTocStore } from '../store/useTocStore'
+import { usePanelStore } from '../store/usePanelStore'
+import { useVersionStore } from '../store/useVersionStore'
 import { useFileOperations } from '../hooks/useFileOperations'
+import { useExportPDFNative } from '../hooks/useExportPDFNative'
+import { useToast } from '../hooks/useToast'
+import { useTemplateStore } from '../store/useTemplateStore'
 import { invoke } from '@tauri-apps/api/tauri'
+import { searchAllCodes, formatArticleForInsertion, CODE_LABELS } from '../data/codes/index'
 import './CommandPalette.css'
 
 interface CommandItem {
@@ -35,6 +41,12 @@ export function CommandPalette() {
   const recentFiles = useRecentFilesStore((state) => state.recentFiles)
 
   const { openFile, saveFile, saveFileAs, markdownToJson } = useFileOperations()
+  const { exportToPDF } = useExportPDFNative()
+  const toast = useToast()
+  const setPdfExportSettingsOpen = useEditorStore((state) => state.setPdfExportSettingsOpen)
+  const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
+  const setShortcutsDialogOpen = useEditorStore((state) => state.setShortcutsDialogOpen)
+  const activeEditor = useEditorStore((state) => state.activeEditor)
 
   // Open a recent file by path
   const openRecentFile = async (path: string) => {
@@ -53,6 +65,7 @@ export function CommandPalette() {
       markAsSaved(id)
     } catch (error) {
       console.error('Error opening recent file:', error)
+      toast.error('Impossible d\'ouvrir le fichier récent')
     }
   }
 
@@ -177,7 +190,85 @@ export function CommandPalette() {
       category: 'Vue',
       action: resetZoom,
     },
+    {
+      id: 'export-pdf',
+      label: 'Exporter en PDF',
+      shortcut: 'Cmd+E',
+      category: 'Export',
+      action: () => activeDocumentId && exportToPDF(activeDocumentId),
+    },
+    {
+      id: 'pdf-export-settings',
+      label: "Paramètres d'export PDF",
+      category: 'Export',
+      action: () => setPdfExportSettingsOpen(true),
+    },
+    {
+      id: 'open-settings',
+      label: 'Ouvrir les paramètres',
+      shortcut: 'Cmd+,',
+      category: 'Application',
+      action: () => setSettingsOpen(true),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      label: 'Raccourcis clavier',
+      shortcut: 'Cmd+/',
+      category: 'Application',
+      action: () => setShortcutsDialogOpen(true),
+    },
+    {
+      id: 'versions-panel',
+      label: 'Historique des versions',
+      shortcut: 'Cmd+Shift+H',
+      category: 'Panneaux',
+      action: () => usePanelStore.getState().togglePanel('versions'),
+    },
+    {
+      id: 'save-as-template',
+      label: 'Sauvegarder comme modèle',
+      category: 'Document',
+      action: () => {
+        const doc = useDocumentStore.getState().getActiveDocument()
+        if (doc) {
+          const name = window.prompt('Nom du modèle :', doc.title)
+          if (name) {
+            useTemplateStore.getState().createTemplate({
+              name,
+              description: `Modèle créé depuis "${doc.title}"`,
+              category: 'custom',
+              content: doc.content,
+              metadata: { defaultStyles: [], tags: ['custom'] },
+            }).then(() => {
+              toast.success(`Modèle "${name}" créé`)
+            }).catch((err: Error) => {
+              toast.error(`Erreur : ${err.message}`)
+            })
+          }
+        }
+      },
+    },
+    {
+      id: 'create-snapshot',
+      label: 'Créer un snapshot',
+      category: 'Document',
+      action: () => {
+        const doc = useDocumentStore.getState().getActiveDocument()
+        if (doc) {
+          useVersionStore.getState().createVersion(doc.id, `Snapshot ${new Date().toLocaleString('fr-FR')}`, doc.content, false)
+          toast.success('Snapshot créé')
+        }
+      },
+    },
   ]
+
+  // Search articles in legal codes when query looks like an article reference
+  const codeResults = useMemo(() => {
+    if (!search || search.length < 2) return []
+    const isArticleSearch = /\d/.test(search) || /^(art|code|civ|pen|trav|com|cpc)/i.test(search)
+    if (!isArticleSearch) return []
+    return searchAllCodes(search.replace(/^art\.?\s*/i, '')).slice(0, 5)
+  }, [search])
 
   // Group commands by category
   const categories = Array.from(new Set(commands.map((cmd) => cmd.category)))
@@ -188,7 +279,7 @@ export function CommandPalette() {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
 
-      if (cmdOrCtrl && e.key === 'p') {
+      if (cmdOrCtrl && e.shiftKey && e.key === 'p') {
         e.preventDefault()
         setOpen((prev) => !prev)
       }
@@ -267,6 +358,33 @@ export function CommandPalette() {
                         day: 'numeric',
                       })}
                     </span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            )}
+
+            {/* Legal code results */}
+            {codeResults.length > 0 && (
+              <Command.Group heading="Codes juridiques" className="command-group">
+                {codeResults.map((article) => (
+                  <Command.Item
+                    key={`${article.code}-${article.numero}`}
+                    onSelect={() => {
+                      if (activeEditor) {
+                        activeEditor.chain().focus().insertContent(
+                          formatArticleForInsertion(article, article.code)
+                        ).run()
+                      }
+                      setOpen(false)
+                    }}
+                    className="command-item"
+                  >
+                    <div className="flex flex-col flex-1">
+                      <span>Art. {article.numero} {CODE_LABELS[article.code]}</span>
+                      <span className="text-xs opacity-60 truncate">
+                        {article.contenu.slice(0, 80)}...
+                      </span>
+                    </div>
                   </Command.Item>
                 ))}
               </Command.Group>

@@ -145,6 +145,29 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn write_binary_file(path: String, content: Vec<u8>) -> Result<(), String> {
+    fs::write(&path, content).map_err(|e| format!("Failed to write binary file: {}", e))
+}
+
+#[tauri::command]
+async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
+    fs::read(&path).map_err(|e| format!("Failed to read binary file: {}", e))
+}
+
+#[tauri::command]
+async fn copy_file(source: String, destination: String) -> Result<(), String> {
+    // Ensure destination directory exists
+    if let Some(parent) = Path::new(&destination).parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+    }
+    fs::copy(&source, &destination)
+        .map(|_| ())
+        .map_err(|e| format!("Failed to copy file: {}", e))
+}
+
+#[tauri::command]
 async fn file_exists(path: String) -> Result<bool, String> {
     Ok(std::path::Path::new(&path).exists())
 }
@@ -1106,6 +1129,12 @@ fn main() {
             let _ = window.emit("menu-event", menu_id);
         })
         .setup(|app| {
+            // Open devtools only in debug mode
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.get_window("main") {
+                window.open_devtools();
+            }
+
             // Handle deep links (citadelle:// URLs)
             // Check if app was launched with a URL argument
             let args: Vec<String> = std::env::args().collect();
@@ -1125,6 +1154,9 @@ fn main() {
             // File system commands
             read_file,
             write_file,
+            write_binary_file,
+            read_binary_file,
+            copy_file,
             file_exists,
             list_directory,
             create_folder,

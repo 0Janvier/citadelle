@@ -21,18 +21,20 @@ import { HomeTab } from './tabs/HomeTab'
 import { InsertTab } from './tabs/InsertTab'
 import { LayoutTab } from './tabs/LayoutTab'
 import { ViewTab } from './tabs/ViewTab'
+import { ReviewTab } from './tabs/ReviewTab'
 
 interface RibbonProps {
   editor: Editor | null
 }
 
-type TabId = 'home' | 'insert' | 'layout' | 'view'
+type TabId = 'home' | 'insert' | 'layout' | 'review' | 'view'
 
 const TABS: { id: TabId; label: string; shortcut: string }[] = [
   { id: 'home', label: 'Accueil', shortcut: '1' },
   { id: 'insert', label: 'Insertion', shortcut: '2' },
   { id: 'layout', label: 'Mise en page', shortcut: '3' },
-  { id: 'view', label: 'Affichage', shortcut: '4' },
+  { id: 'review', label: 'Révision', shortcut: '4' },
+  { id: 'view', label: 'Affichage', shortcut: '5' },
 ]
 
 export function Ribbon({ editor }: RibbonProps) {
@@ -190,6 +192,7 @@ export function Ribbon({ editor }: RibbonProps) {
           {activeTab === 'home' && <HomeTab editor={editor} />}
           {activeTab === 'insert' && <InsertTab editor={editor} />}
           {activeTab === 'layout' && <LayoutTab />}
+          {activeTab === 'review' && <ReviewTab editor={editor} />}
           {activeTab === 'view' && <ViewTab />}
         </div>
       )}

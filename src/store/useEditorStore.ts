@@ -1,10 +1,26 @@
 import { create } from 'zustand'
 import type { Editor } from '@tiptap/react'
 
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
 interface EditorStore {
   // Active editor instance (shared between components)
   activeEditor: Editor | null
   setActiveEditor: (editor: Editor | null) => void
+
+  // Save status for animated indicator
+  saveStatus: SaveStatus
+  saveErrorMessage: string | null
+  setSaveStatus: (status: SaveStatus, errorMessage?: string | null) => void
+
+  // Export status
+  isExporting: boolean
+  exportFormat: string | null
+  setExporting: (exporting: boolean, format?: string | null) => void
+
+  // Backup tracking
+  lastBackupTime: number | null
+  setLastBackupTime: (time: number) => void
 
   // View mode
   viewMode: 'edit' | 'preview' | 'split'
@@ -52,15 +68,48 @@ interface EditorStore {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
 
+  // PDF Export Settings
+  pdfExportSettingsOpen: boolean
+  setPdfExportSettingsOpen: (open: boolean) => void
+
   // Project search
   projectSearchOpen: boolean
   setProjectSearchOpen: (open: boolean) => void
+
+  // Keyboard shortcuts dialog
+  shortcutsDialogOpen: boolean
+  setShortcutsDialogOpen: (open: boolean) => void
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
   // Active editor instance
   activeEditor: null,
   setActiveEditor: (editor) => set({ activeEditor: editor }),
+
+  // Save status
+  saveStatus: 'idle' as SaveStatus,
+  saveErrorMessage: null,
+  setSaveStatus: (status, errorMessage = null) => {
+    set({ saveStatus: status, saveErrorMessage: errorMessage })
+    // Auto-reset 'saved' to 'idle' after 3 seconds
+    if (status === 'saved') {
+      setTimeout(() => {
+        const current = useEditorStore.getState().saveStatus
+        if (current === 'saved') {
+          set({ saveStatus: 'idle', saveErrorMessage: null })
+        }
+      }, 3000)
+    }
+  },
+
+  // Export status
+  isExporting: false,
+  exportFormat: null,
+  setExporting: (exporting, format = null) => set({ isExporting: exporting, exportFormat: format }),
+
+  // Backup tracking
+  lastBackupTime: null,
+  setLastBackupTime: (time) => set({ lastBackupTime: time }),
 
   // View mode
   viewMode: 'edit',
@@ -116,7 +165,15 @@ export const useEditorStore = create<EditorStore>((set) => ({
   settingsOpen: false,
   setSettingsOpen: (open) => set({ settingsOpen: open }),
 
+  // PDF Export Settings
+  pdfExportSettingsOpen: false,
+  setPdfExportSettingsOpen: (open) => set({ pdfExportSettingsOpen: open }),
+
   // Project search
   projectSearchOpen: false,
   setProjectSearchOpen: (open) => set({ projectSearchOpen: open }),
+
+  // Keyboard shortcuts dialog
+  shortcutsDialogOpen: false,
+  setShortcutsDialogOpen: (open) => set({ shortcutsDialogOpen: open }),
 }))

@@ -5,7 +5,6 @@ export type PanelType =
   | 'formatting'
   | 'clauses'
   | 'variables'
-  | 'deadlines'
   | 'search'
   | 'codes'
   | 'comments'
@@ -19,26 +18,45 @@ export type PanelType =
   | 'project'
   | 'terms'
   | 'pageLayout'
-  | 'typography'
   | 'settings'
+  | 'goldocab'
+  | 'deadlines'
+  | 'versions'
   | null
 
 interface PanelState {
   activePanel: PanelType
+  lastPanel: PanelType
   openPanel: (panel: PanelType) => void
   closePanel: () => void
   togglePanel: (panel: PanelType) => void
+  reopenLastPanel: () => void
 }
 
 export const usePanelStore = create<PanelState>((set, get) => ({
   activePanel: null,
+  lastPanel: null,
 
   openPanel: (panel) => set({ activePanel: panel }),
 
-  closePanel: () => set({ activePanel: null }),
+  closePanel: () => {
+    const { activePanel } = get()
+    set({ activePanel: null, lastPanel: activePanel })
+  },
 
   togglePanel: (panel) => {
     const { activePanel } = get()
-    set({ activePanel: activePanel === panel ? null : panel })
+    if (activePanel === panel) {
+      set({ activePanel: null, lastPanel: panel })
+    } else {
+      set({ activePanel: panel })
+    }
+  },
+
+  reopenLastPanel: () => {
+    const { lastPanel } = get()
+    if (lastPanel) {
+      set({ activePanel: lastPanel })
+    }
   },
 }))

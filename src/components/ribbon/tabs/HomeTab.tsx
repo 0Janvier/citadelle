@@ -11,6 +11,9 @@ import {
   Underline,
   Strikethrough,
   Highlighter,
+  Superscript,
+  Subscript,
+  Palette,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -37,8 +40,20 @@ interface HomeTabProps {
   editor: Editor | null
 }
 
+const TEXT_COLORS = [
+  { name: 'Automatique', value: '' },
+  { name: 'Noir', value: '#000000' },
+  { name: 'Bleu foncé', value: '#1e3a5f' },
+  { name: 'Rouge', value: '#dc2626' },
+  { name: 'Vert foncé', value: '#166534' },
+  { name: 'Orange', value: '#ea580c' },
+  { name: 'Violet', value: '#7c3aed' },
+  { name: 'Gris', value: '#6b7280' },
+]
+
 export function HomeTab({ editor }: HomeTabProps) {
   const [showHighlightColors, setShowHighlightColors] = useState(false)
+  const [showTextColors, setShowTextColors] = useState(false)
   // Force le re-render quand la sélection change pour mettre à jour les pickers
   const [, setSelectionUpdate] = useState(0)
 
@@ -217,6 +232,54 @@ export function HomeTab({ editor }: HomeTabProps) {
                 </div>
               )}
             </div>
+            <div className="relative">
+              <RibbonButton
+                variant="icon"
+                onClick={() => setShowTextColors(!showTextColors)}
+                tooltip="Couleur du texte"
+              >
+                <Palette size={16} />
+              </RibbonButton>
+              {showTextColors && (
+                <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg)] border border-[var(--border)]
+                  rounded-lg shadow-lg z-dropdown grid grid-cols-4 gap-1 animate-scaleIn">
+                  {TEXT_COLORS.map((color) => (
+                    <button
+                      key={color.name}
+                      type="button"
+                      onClick={() => {
+                        if (color.value) {
+                          editor.chain().focus().setColor(color.value).run()
+                        } else {
+                          editor.chain().focus().unsetColor().run()
+                        }
+                        setShowTextColors(false)
+                      }}
+                      className="w-6 h-6 rounded border border-[var(--border)] hover:scale-110 transition-transform"
+                      style={{ backgroundColor: color.value || 'var(--text)' }}
+                      title={color.name}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <RibbonSeparator />
+            <RibbonButton
+              variant="icon"
+              isActive={editor.isActive('superscript')}
+              onClick={() => editor.chain().focus().toggleSuperscript().run()}
+              tooltip="Exposant"
+            >
+              <Superscript size={16} />
+            </RibbonButton>
+            <RibbonButton
+              variant="icon"
+              isActive={editor.isActive('subscript')}
+              onClick={() => editor.chain().focus().toggleSubscript().run()}
+              tooltip="Indice"
+            >
+              <Subscript size={16} />
+            </RibbonButton>
           </div>
         </div>
       </RibbonGroup>

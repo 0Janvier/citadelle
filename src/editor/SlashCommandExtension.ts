@@ -1,5 +1,5 @@
 // Extension TipTap pour l'autocomplétion avec /commandes
-// Permet d'insérer des snippets juridiques rapidement
+// Permet d'insérer des snippets juridiques et des blocs rapidement
 
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
@@ -21,6 +21,7 @@ export interface SlashCommandOptions {
 export interface SuggestionProps {
   query: string
   items: Snippet[]
+  selectedIndex: number
   command: (item: Snippet) => void
   clientRect: (() => DOMRect | null) | null
 }
@@ -63,7 +64,7 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             }
           },
 
-          apply(tr, _prev, _oldState, newState) {
+          apply(tr, prev, _oldState, newState) {
             const meta = tr.getMeta(slashCommandPluginKey)
             if (meta) {
               return meta
@@ -81,6 +82,12 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               const query = slashMatch[1]
               const items = suggestion.items(query)
 
+              // Conserver selectedIndex si query identique, sinon reset
+              const keepIndex = prev.active && prev.query === query
+              const selectedIndex = keepIndex
+                ? Math.min(prev.selectedIndex, Math.max(items.length - 1, 0))
+                : 0
+
               return {
                 active: true,
                 query,
@@ -89,7 +96,7 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
                   to: $from.pos,
                 },
                 items,
-                selectedIndex: 0,
+                selectedIndex,
               }
             }
 
@@ -106,14 +113,14 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
         props: {
           handleKeyDown(view, event) {
             const state = slashCommandPluginKey.getState(view.state)
-            if (!state?.active) return false
+            if (!state?.active || state.items.length === 0) return false
 
             const { items, selectedIndex } = state
 
-            // Navigation
+            // Navigation bas
             if (event.key === 'ArrowDown') {
               event.preventDefault()
-              const newIndex = Math.min(selectedIndex + 1, items.length - 1)
+              const newIndex = (selectedIndex + 1) % items.length
               view.dispatch(
                 view.state.tr.setMeta(slashCommandPluginKey, {
                   ...state,
@@ -123,9 +130,10 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               return true
             }
 
+            // Navigation haut
             if (event.key === 'ArrowUp') {
               event.preventDefault()
-              const newIndex = Math.max(selectedIndex - 1, 0)
+              const newIndex = (selectedIndex - 1 + items.length) % items.length
               view.dispatch(
                 view.state.tr.setMeta(slashCommandPluginKey, {
                   ...state,
@@ -140,24 +148,12 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               event.preventDefault()
               const selectedItem = items[selectedIndex]
               if (selectedItem && state.range) {
-                // Supprimer le /query et insérer le contenu
                 const { from, to } = state.range
                 editor.chain()
                   .focus()
                   .deleteRange({ from, to })
                   .insertContent(selectedItem.contenu)
                   .run()
-
-                // Fermer le menu
-                view.dispatch(
-                  view.state.tr.setMeta(slashCommandPluginKey, {
-                    active: false,
-                    query: '',
-                    range: null,
-                    items: [],
-                    selectedIndex: 0,
-                  })
-                )
               }
               return true
             }
@@ -185,7 +181,6 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               return DecorationSet.empty
             }
 
-            // Ajouter une décoration pour surligner le /query
             const { from, to } = pluginState.range
             return DecorationSet.create(state.doc, [
               Decoration.inline(from, to, {
@@ -203,13 +198,13 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               const state = slashCommandPluginKey.getState(view.state)
 
               if (state?.active && state.items.length > 0) {
-                // Obtenir la position du curseur pour afficher le menu
                 const { from } = state.range!
                 const coords = view.coordsAtPos(from)
 
                 const props: SuggestionProps = {
                   query: state.query,
                   items: state.items,
+                  selectedIndex: state.selectedIndex,
                   command: (item: Snippet) => {
                     if (state.range) {
                       editor.chain()
@@ -257,61 +252,48 @@ export function createSlashCommandSuggestion(
     items: getItems,
     render: () => {
       let popup: HTMLDivElement | null = null
-      let currentProps: SuggestionProps | null = null
 
       const createPopup = () => {
         popup = document.createElement('div')
         popup.className = 'slash-command-popup'
-        popup.style.cssText = `
-          position: fixed;
-          z-index: 9999;
-          background: var(--bg-primary, white);
-          border: 1px solid var(--border-color, #e5e7eb);
-          border-radius: 8px;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-          max-height: 300px;
-          overflow-y: auto;
-          min-width: 250px;
-          padding: 4px;
-        `
         document.body.appendChild(popup)
       }
 
       const updatePopup = (props: SuggestionProps) => {
         if (!popup) return
 
-        // Positionner le popup
+        // Positionner
         const rect = props.clientRect?.()
         if (rect) {
           popup.style.left = `${rect.left}px`
           popup.style.top = `${rect.bottom + 8}px`
         }
 
-        // Générer le contenu
+        // Générer le contenu avec selectedIndex
         popup.innerHTML = props.items
           .map((item, index) => {
-            const isSelected = index === (currentProps as any)?.selectedIndex || index === 0
+            const isSelected = index === props.selectedIndex
             return `
               <div
-                class="slash-command-item ${isSelected ? 'selected' : ''}"
+                class="slash-command-item${isSelected ? ' selected' : ''}"
                 data-index="${index}"
-                style="
-                  padding: 8px 12px;
-                  cursor: pointer;
-                  border-radius: 4px;
-                  ${isSelected ? 'background: var(--bg-secondary, #f3f4f6);' : ''}
-                "
               >
-                <div style="font-weight: 500; font-size: 14px;">${item.nom}</div>
-                <div style="font-size: 12px; color: var(--text-secondary, #6b7280);">
-                  ${item.raccourci} ${item.description ? '• ' + item.description : ''}
+                <div class="slash-command-title">${escapeHtml(item.nom)}</div>
+                <div class="slash-command-description">
+                  ${escapeHtml(item.raccourci)}${item.description ? ' · ' + escapeHtml(item.description) : ''}
                 </div>
               </div>
             `
           })
           .join('')
 
-        // Ajouter les événements de clic
+        // Scroll l'item sélectionné dans la vue
+        const selectedEl = popup.querySelector('.slash-command-item.selected')
+        if (selectedEl) {
+          selectedEl.scrollIntoView({ block: 'nearest' })
+        }
+
+        // Événements de clic et hover
         popup.querySelectorAll('.slash-command-item').forEach((el, index) => {
           el.addEventListener('click', () => {
             const item = props.items[index]
@@ -321,22 +303,20 @@ export function createSlashCommandSuggestion(
             }
           })
           el.addEventListener('mouseenter', () => {
-            popup?.querySelectorAll('.slash-command-item').forEach((e) => {
-              ;(e as HTMLElement).style.background = ''
+            popup?.querySelectorAll('.slash-command-item.selected').forEach((e) => {
+              e.classList.remove('selected')
             })
-            ;(el as HTMLElement).style.background = 'var(--bg-secondary, #f3f4f6)'
+            el.classList.add('selected')
           })
         })
       }
 
       return {
         onStart: (props) => {
-          currentProps = props
           createPopup()
           updatePopup(props)
         },
         onUpdate: (props) => {
-          currentProps = props
           updatePopup(props)
         },
         onKeyDown: ({ event }) => {
@@ -350,9 +330,16 @@ export function createSlashCommandSuggestion(
         onExit: () => {
           popup?.remove()
           popup = null
-          currentProps = null
         },
       }
     },
   }
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }

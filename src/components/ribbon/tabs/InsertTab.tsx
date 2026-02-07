@@ -16,6 +16,7 @@ import {
   Variable,
   BookMarked,
   ListTree,
+  Footprints,
 } from 'lucide-react'
 import { RibbonButton } from '../RibbonButton'
 import { RibbonGroup, RibbonDivider } from '../RibbonGroup'
@@ -166,6 +167,14 @@ export function InsertTab({ editor }: InsertTabProps) {
 
       {/* Juridique */}
       <RibbonGroup label="Juridique">
+        <RibbonButton
+          variant="large"
+          onClick={() => editor.commands.insertFootnote()}
+          tooltip="Note de bas de page (Cmd+Shift+N)"
+        >
+          <Footprints size={20} />
+          <span>Note</span>
+        </RibbonButton>
         <RibbonButton
           variant="large"
           onClick={() => {

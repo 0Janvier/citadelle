@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { listen } from '@tauri-apps/api/event'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useEditorStore } from '../store/useEditorStore'
@@ -25,23 +26,34 @@ export function useNativeMenuEvents() {
   const addDocument = useDocumentStore((s) => s.addDocument)
   const removeDocument = useDocumentStore((s) => s.removeDocument)
 
-  // Editor store (we use getState() for these in the listener to get fresh values)
-  const toggleDistractionFree = useEditorStore((s) => s.toggleDistractionFree)
-  const toggleToolbar = useEditorStore((s) => s.toggleToolbar)
-  const toggleStatusBar = useEditorStore((s) => s.toggleStatusBar)
-  const toggleTabBar = useEditorStore((s) => s.toggleTabBar)
-  const setFindDialogOpen = useEditorStore((s) => s.setFindDialogOpen)
-  const setShowReplace = useEditorStore((s) => s.setShowReplace)
-  const setSettingsOpen = useEditorStore((s) => s.setSettingsOpen)
-  const increaseZoom = useEditorStore((s) => s.increaseZoom)
-  const decreaseZoom = useEditorStore((s) => s.decreaseZoom)
-  const resetZoom = useEditorStore((s) => s.resetZoom)
+  // Editor store
+  const {
+    toggleDistractionFree, toggleToolbar, toggleStatusBar, toggleTabBar,
+    setFindDialogOpen, setShowReplace, setSettingsOpen,
+    increaseZoom, decreaseZoom, resetZoom,
+  } = useEditorStore(useShallow((s) => ({
+    toggleDistractionFree: s.toggleDistractionFree,
+    toggleToolbar: s.toggleToolbar,
+    toggleStatusBar: s.toggleStatusBar,
+    toggleTabBar: s.toggleTabBar,
+    setFindDialogOpen: s.setFindDialogOpen,
+    setShowReplace: s.setShowReplace,
+    setSettingsOpen: s.setSettingsOpen,
+    increaseZoom: s.increaseZoom,
+    decreaseZoom: s.decreaseZoom,
+    resetZoom: s.resetZoom,
+  })))
 
   // Settings store
-  const setTheme = useSettingsStore((s) => s.setTheme)
-  const toggleTypewriterMode = useSettingsStore((s) => s.toggleTypewriterMode)
-  const setTypewriterHighlightStyle = useSettingsStore((s) => s.setTypewriterHighlightStyle)
-  const setTypewriterScrollPosition = useSettingsStore((s) => s.setTypewriterScrollPosition)
+  const {
+    setTheme, toggleTypewriterMode,
+    setTypewriterHighlightStyle, setTypewriterScrollPosition,
+  } = useSettingsStore(useShallow((s) => ({
+    setTheme: s.setTheme,
+    toggleTypewriterMode: s.toggleTypewriterMode,
+    setTypewriterHighlightStyle: s.setTypewriterHighlightStyle,
+    setTypewriterScrollPosition: s.setTypewriterScrollPosition,
+  })))
 
   // Other stores
   const toggleSidebar = useFolderStore((s) => s.toggleSidebar)
@@ -60,7 +72,7 @@ export function useNativeMenuEvents() {
       switch (menuId) {
         // ===== File menu =====
         case 'new_document':
-          addDocument()
+          window.dispatchEvent(new CustomEvent('show-new-doc-dialog'))
           break
         case 'open_document':
           openFile()
@@ -70,6 +82,9 @@ export function useNativeMenuEvents() {
           break
         case 'save_document_as':
           if (currentActiveDocumentId) saveFileAs(currentActiveDocumentId)
+          break
+        case 'save_as_template':
+          window.dispatchEvent(new CustomEvent('show-save-as-template'))
           break
         case 'close_tab':
           if (currentActiveDocumentId) {
@@ -208,6 +223,12 @@ export function useNativeMenuEvents() {
         case 'format_highlight':
           currentActiveEditor?.chain().focus().toggleHighlight().run()
           break
+        case 'format_superscript':
+          currentActiveEditor?.chain().focus().toggleSuperscript().run()
+          break
+        case 'format_subscript':
+          currentActiveEditor?.chain().focus().toggleSubscript().run()
+          break
         case 'format_h1':
           currentActiveEditor?.chain().focus().toggleHeading({ level: 1 }).run()
           break
@@ -271,10 +292,17 @@ export function useNativeMenuEvents() {
 
         // ===== Help =====
         case 'help_docs':
-          // TODO: Open documentation
+          import('@tauri-apps/api/shell').then(({ open }) => {
+            open('https://github.com/citadelle-editor/docs')
+          }).catch(() => {})
           break
         case 'help_shortcuts':
-          // TODO: Show shortcuts dialog
+          useEditorStore.getState().setShortcutsDialogOpen(true)
+          break
+
+        // ===== App menu =====
+        case 'about':
+          // Tauri gère nativement "À propos" sur macOS
           break
 
         default:
@@ -283,7 +311,7 @@ export function useNativeMenuEvents() {
     })
 
     return () => {
-      unlisten.then((fn) => fn())
+      unlisten.then((fn) => fn()).catch(() => {})
     }
   }, [
     addDocument,

@@ -8,7 +8,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { open } from '@tauri-apps/api/shell';
 import { useDocumentStore } from '../store/useDocumentStore';
+import { handleError } from '../lib/errorHandler';
 
 // ============================================================================
 // Types
@@ -76,7 +78,7 @@ export function useGoldocabIntegration() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setError(errorMsg);
-      console.error('[GoldoCab] Failed to start edit session:', err);
+      handleError(err, 'GoldoCab', { silent: true });
       return null;
     }
   }, []);
@@ -103,7 +105,7 @@ export function useGoldocabIntegration() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setError(errorMsg);
-      console.error('[GoldoCab] Failed to complete session:', err);
+      handleError(err, 'GoldoCab', { silent: true });
       return null;
     }
   }, [currentSession]);
@@ -126,7 +128,7 @@ export function useGoldocabIntegration() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setError(errorMsg);
-      console.error('[GoldoCab] Failed to cancel session:', err);
+      handleError(err, 'GoldoCab', { silent: true });
       return false;
     }
   }, [currentSession]);
@@ -139,7 +141,7 @@ export function useGoldocabIntegration() {
       const sessions = await invoke<GoldocabEditSession[]>('list_goldocab_sessions');
       setActiveSessions(sessions);
     } catch (err) {
-      console.error('[GoldoCab] Failed to list sessions:', err);
+      handleError(err, 'GoldoCab', { silent: true });
     }
   }, []);
 
@@ -181,7 +183,7 @@ export function useGoldocabIntegration() {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setError(errorMsg);
-      console.error('[GoldoCab] Export failed:', err);
+      handleError(err, 'GoldoCab', { silent: true });
       return null;
     } finally {
       setIsExporting(false);
@@ -211,7 +213,7 @@ export function useGoldocabIntegration() {
       const result = await completeEditSession(currentSession.working_path);
       return result !== null;
     } catch (err) {
-      console.error('[GoldoCab] Save and return failed:', err);
+      handleError(err, 'GoldoCab');
       return false;
     }
   }, [currentSession, activeDocument, getDocument, completeEditSession]);
@@ -249,7 +251,7 @@ export function useGoldocabIntegration() {
             console.log('[GoldoCab] File loaded, content length:', content.length);
           }
         } catch (err) {
-          console.error('[GoldoCab] Failed to handle deep link:', err);
+          handleError(err, 'GoldoCab');
         }
       });
     };
@@ -316,7 +318,7 @@ export async function openGoldocabDossier(dossierId: string): Promise<void> {
   const url = `goldocab://dossier/${dossierId}`;
 
   try {
-    await invoke('shell_open', { url });
+    await open(url);
   } catch (err) {
     // Fallback: try window.open
     window.open(url, '_blank');
@@ -331,9 +333,9 @@ export async function notifyGoldocabDocumentModified(filePath: string): Promise<
 
   try {
     // Use Tauri shell to open URL scheme
-    await invoke('shell_open', { url });
+    await open(url);
   } catch (err) {
-    console.error('[GoldoCab] Failed to notify modification:', err);
+    handleError(err, 'GoldoCab', { silent: true });
   }
 }
 

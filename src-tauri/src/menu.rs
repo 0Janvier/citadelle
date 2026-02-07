@@ -31,6 +31,8 @@ pub fn create_app_menu() -> Menu {
         .accelerator("Cmd+S");
     let save_as = CustomMenuItem::new("save_document_as", "Enregistrer sous...")
         .accelerator("Cmd+Shift+S");
+    let save_as_template = CustomMenuItem::new("save_as_template", "Sauvegarder comme modèle...")
+        .accelerator("Cmd+Shift+T");
     let close_tab = CustomMenuItem::new("close_tab", "Fermer l'onglet")
         .accelerator("Cmd+W");
 
@@ -57,6 +59,7 @@ pub fn create_app_menu() -> Menu {
             .add_native_item(MenuItem::Separator)
             .add_item(save)
             .add_item(save_as)
+            .add_item(save_as_template)
             .add_native_item(MenuItem::Separator)
             .add_submenu(export_submenu)
             .add_native_item(MenuItem::Separator)
@@ -198,6 +201,8 @@ pub fn create_app_menu() -> Menu {
         .accelerator("Cmd+Shift+X");
     let highlight = CustomMenuItem::new("format_highlight", "Surligner")
         .accelerator("Cmd+Shift+H");
+    let superscript = CustomMenuItem::new("format_superscript", "Exposant");
+    let subscript = CustomMenuItem::new("format_subscript", "Indice");
 
     let h1 = CustomMenuItem::new("format_h1", "Titre 1")
         .accelerator("Cmd+1");
@@ -249,6 +254,9 @@ pub fn create_app_menu() -> Menu {
             .add_item(strike)
             .add_item(highlight)
             .add_native_item(MenuItem::Separator)
+            .add_item(superscript)
+            .add_item(subscript)
+            .add_native_item(MenuItem::Separator)
             .add_item(h1)
             .add_item(h2)
             .add_item(h3)
@@ -264,7 +272,7 @@ pub fn create_app_menu() -> Menu {
 
     // ===== Document Menu =====
     let pieces = CustomMenuItem::new("doc_pieces", "Pièces justificatives")
-        .accelerator("Cmd+Shift+P");
+        .accelerator("Cmd+Shift+J");
     let toc = CustomMenuItem::new("doc_toc", "Table des matières")
         .accelerator("Cmd+Shift+M");
     let clauses = CustomMenuItem::new("doc_clauses", "Bibliothèque de clauses")

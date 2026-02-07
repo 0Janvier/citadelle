@@ -20,12 +20,14 @@ export interface CollapsibleHeadingsOptions {
 const collapsiblePluginKey = new PluginKey('collapsibleHeadings')
 
 /**
- * Generate a unique ID for a heading based on its position and content
+ * Generate a stable ID for a heading based on its content (not position).
+ * Uses content + level + duplicate index so IDs don't shift when headings are added/removed.
+ * duplicateIndex=1 means first occurrence (no suffix), 2+ gets a suffix.
  */
-function generateHeadingId(pos: number, text: string): string {
-  // Use position + first 20 chars of text as ID
-  const sanitized = text.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '-')
-  return `heading-${pos}-${sanitized}`
+function generateHeadingId(text: string, level: number, duplicateIndex: number): string {
+  const sanitized = text.slice(0, 40).replace(/[^a-zA-Z0-9\u00C0-\u017F]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()
+  const base = `h${level}-${sanitized || 'empty'}`
+  return duplicateIndex > 1 ? `${base}-${duplicateIndex}` : base
 }
 
 /**
@@ -39,7 +41,7 @@ function findSectionEnd(doc: any, startPos: number, headingLevel: number): numbe
       const level = node.attrs.level || 1
       if (level <= headingLevel) {
         endPos = pos
-        return false // Stop iteration
+        return false
       }
     }
     return true
@@ -52,8 +54,9 @@ function findSectionEnd(doc: any, startPos: number, headingLevel: number): numbe
  * Check if a heading has content after it (to show toggle)
  */
 function hasContentAfter(doc: any, headingEndPos: number, sectionEndPos: number): boolean {
-  let hasContent = false
+  if (sectionEndPos <= headingEndPos) return false
 
+  let hasContent = false
   doc.nodesBetween(headingEndPos, sectionEndPos, (node: any) => {
     if (node.isBlock && node.type.name !== 'heading') {
       hasContent = true
@@ -63,6 +66,58 @@ function hasContentAfter(doc: any, headingEndPos: number, sectionEndPos: number)
   })
 
   return hasContent
+}
+
+interface HeadingInfo {
+  pos: number
+  endPos: number
+  level: number
+  text: string
+  id: string
+  sectionEndPos: number
+  hasContent: boolean
+}
+
+/**
+ * Collect all headings with their stable IDs
+ */
+function collectHeadings(doc: any, levels: number[]): HeadingInfo[] {
+  const headings: HeadingInfo[] = []
+  // Track duplicates by content+level to assign stable duplicate indices
+  const textCounters: Record<string, number> = {}
+
+  doc.descendants((node: any, pos: number) => {
+    if (node.type.name === 'heading') {
+      const level = node.attrs.level || 1
+
+      if (!levels.includes(level)) {
+        return true
+      }
+
+      const text = node.textContent
+      // Count duplicates by normalized content + level
+      const contentKey = `h${level}-${text.slice(0, 40).replace(/[^a-zA-Z0-9\u00C0-\u017F]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase()}`
+      textCounters[contentKey] = (textCounters[contentKey] || 0) + 1
+
+      const id = generateHeadingId(text, level, textCounters[contentKey])
+      const endPos = pos + node.nodeSize
+      const sectionEndPos = findSectionEnd(doc, pos, level)
+      const hasContent = hasContentAfter(doc, endPos, sectionEndPos)
+
+      headings.push({
+        pos,
+        endPos,
+        level,
+        text,
+        id,
+        sectionEndPos,
+        hasContent,
+      })
+    }
+    return true
+  })
+
+  return headings
 }
 
 /**
@@ -76,92 +131,86 @@ function buildDecorations(
 ): Decoration[] {
   const decorations: Decoration[] = []
   const collapsedSet = new Set(collapsedIds)
+  const headings = collectHeadings(doc, levels)
 
-  doc.descendants((node: any, pos: number) => {
-    if (node.type.name === 'heading') {
-      const level = node.attrs.level || 1
+  for (const heading of headings) {
+    if (!heading.hasContent) {
+      continue
+    }
 
-      if (!levels.includes(level)) {
-        return true
-      }
+    const collapsed = collapsedSet.has(heading.id)
 
-      const headingText = node.textContent
-      const headingId = generateHeadingId(pos, headingText)
-      const headingEndPos = pos + node.nodeSize
-      const sectionEndPos = findSectionEnd(doc, pos, level)
-      const hasContent = hasContentAfter(doc, headingEndPos, sectionEndPos)
-
-      if (!hasContent) {
-        return true // No content to collapse
-      }
-
-      const collapsed = collapsedSet.has(headingId)
-
-      // Add chevron widget decoration INSIDE the heading (pos + 1 = after opening tag)
-      const chevronWidget = Decoration.widget(pos + 1, () => {
+    // Create chevron button widget - placed BEFORE the heading content
+    const chevronWidget = Decoration.widget(
+      heading.pos + 1,
+      (view) => {
         const button = document.createElement('button')
         button.className = `collapsible-chevron ${collapsed ? 'collapsed' : 'expanded'}`
-        button.setAttribute('data-heading-id', headingId)
+        button.setAttribute('data-heading-id', heading.id)
         button.setAttribute('aria-expanded', String(!collapsed))
         button.setAttribute('aria-label', collapsed ? 'Déplier la section' : 'Replier la section')
         button.type = 'button'
         button.contentEditable = 'false'
 
-        // SVG chevron icon
         button.innerHTML = `
           <svg class="collapsible-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
           </svg>
         `
 
-        // Click is handled by handleDOMEvents in the plugin props
-        // This allows proper transaction dispatch for decoration updates
+        // Handle click directly on the button
+        button.addEventListener('mousedown', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        })
+
+        button.addEventListener('click', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+
+          // Toggle state
+          onToggle(heading.id)
+
+          // Force decoration rebuild
+          view.dispatch(view.state.tr.setMeta(collapsiblePluginKey, { toggle: heading.id }))
+        })
 
         return button
-      }, { side: -1, key: `chevron-${headingId}` })
-
-      decorations.push(chevronWidget)
-
-      // Add data attribute to heading for styling
-      const headingDeco = Decoration.node(pos, headingEndPos, {
-        'data-heading-id': headingId,
-        'data-collapsible': 'true',
-        'data-collapsed': String(collapsed),
-        class: `collapsible-heading ${collapsed ? 'is-collapsed' : 'is-expanded'}`,
-      })
-      decorations.push(headingDeco)
-
-      // If collapsed, hide the content after the heading
-      if (collapsed && sectionEndPos > headingEndPos) {
-        // Find all nodes between heading and section end
-        doc.nodesBetween(headingEndPos, sectionEndPos, (childNode: any, childPos: number) => {
-          if (childPos >= headingEndPos && childNode.isBlock) {
-            // Check if this is a heading of lower level (should be hidden)
-            if (childNode.type.name === 'heading') {
-              const childLevel = childNode.attrs.level || 1
-              if (childLevel > level) {
-                // Hide this sub-heading
-                const nodeDeco = Decoration.node(childPos, childPos + childNode.nodeSize, {
-                  class: 'collapsible-hidden',
-                  'data-collapsed-by': headingId,
-                })
-                decorations.push(nodeDeco)
-              }
-            } else {
-              // Hide other content
-              const nodeDeco = Decoration.node(childPos, childPos + childNode.nodeSize, {
-                class: 'collapsible-hidden',
-                'data-collapsed-by': headingId,
-              })
-              decorations.push(nodeDeco)
-            }
-          }
-          return true
-        })
+      },
+      {
+        side: -1,
+        key: `chevron-${heading.id}`,
+        // Prevent widget from being selected
+        ignoreSelection: true,
       }
+    )
+    decorations.push(chevronWidget)
+
+    // Add styling class to heading
+    const headingDeco = Decoration.node(heading.pos, heading.endPos, {
+      'data-heading-id': heading.id,
+      'data-collapsible': 'true',
+      class: `collapsible-heading ${collapsed ? 'is-collapsed' : 'is-expanded'}`,
+    })
+    decorations.push(headingDeco)
+
+    // Hide content if collapsed - only top-level blocks
+    if (collapsed) {
+      doc.nodesBetween(heading.endPos, heading.sectionEndPos, (childNode: any, childPos: number) => {
+        // Only process top-level blocks (direct children of doc)
+        if (childPos >= heading.endPos && childNode.isBlock) {
+          const nodeDeco = Decoration.node(childPos, childPos + childNode.nodeSize, {
+            class: 'collapsible-hidden',
+            'data-collapsed-by': heading.id,
+          })
+          decorations.push(nodeDeco)
+          // Don't descend into children - we hide the whole block
+          return false
+        }
+        return true
+      })
     }
-    return true
-  })
+  }
 
   return decorations
 }
@@ -191,40 +240,24 @@ export const CollapsibleHeadingsExtension = Extension.create<CollapsibleHeadings
             return DecorationSet.create(state.doc, decorations)
           },
 
-          apply: (_tr, _oldDecorationSet, _oldState, newState) => {
-            // Always rebuild decorations on document change or metadata change
-            // This ensures decorations stay in sync with external state
-            const collapsedIds = getCollapsedIds()
-            const decorations = buildDecorations(newState.doc, collapsedIds, levels, onToggle)
-            return DecorationSet.create(newState.doc, decorations)
+          apply: (tr, oldDecorationSet, _oldState, newState) => {
+            // Only rebuild if document changed or toggle was triggered
+            const toggleMeta = tr.getMeta(collapsiblePluginKey)
+
+            if (tr.docChanged || toggleMeta) {
+              const collapsedIds = getCollapsedIds()
+              const decorations = buildDecorations(newState.doc, collapsedIds, levels, onToggle)
+              return DecorationSet.create(newState.doc, decorations)
+            }
+
+            // Map existing decorations through the transaction
+            return oldDecorationSet.map(tr.mapping, newState.doc)
           },
         },
 
         props: {
           decorations: (state) => {
             return collapsiblePluginKey.getState(state)
-          },
-
-          handleDOMEvents: {
-            click: (view, event) => {
-              const target = event.target as HTMLElement
-
-              // Check if clicked on chevron or inside chevron
-              const chevronButton = target.closest('.collapsible-chevron')
-              if (chevronButton) {
-                const headingId = chevronButton.getAttribute('data-heading-id')
-                if (headingId) {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onToggle(headingId)
-                  // Force view update
-                  view.dispatch(view.state.tr.setMeta('collapsibleToggle', headingId))
-                  return true
-                }
-              }
-
-              return false
-            },
           },
         },
       }),
@@ -234,43 +267,32 @@ export const CollapsibleHeadingsExtension = Extension.create<CollapsibleHeadings
   addKeyboardShortcuts() {
     return {
       'Mod-.': () => {
-        // Toggle the section at current cursor position
         const { state } = this.editor
         const { selection } = state
         const { $from } = selection
 
-        // Find the heading that contains or precedes the cursor
-        let headingPos: number | null = null
-        let headingNode: any = null
+        // Collect headings to find the one at cursor
+        const headings = collectHeadings(state.doc, this.options.levels)
 
-        // First check if we're inside a heading
-        for (let d = $from.depth; d >= 0; d--) {
-          const node = $from.node(d)
-          if (node.type.name === 'heading') {
-            headingPos = $from.before(d)
-            headingNode = node
+        // Find heading containing or preceding cursor
+        let targetHeading: HeadingInfo | null = null
+
+        for (const heading of headings) {
+          // Check if cursor is inside this heading
+          if ($from.pos >= heading.pos && $from.pos <= heading.endPos) {
+            targetHeading = heading
             break
+          }
+          // Or if this heading precedes cursor
+          if (heading.pos < $from.pos) {
+            targetHeading = heading
           }
         }
 
-        // If not in a heading, find the previous heading
-        if (headingPos === null) {
-          state.doc.nodesBetween(0, $from.pos, (node, pos) => {
-            if (node.type.name === 'heading') {
-              headingPos = pos
-              headingNode = node
-            }
-            return true
-          })
-        }
-
-        if (headingPos !== null && headingNode) {
-          const headingText = headingNode.textContent
-          const headingId = generateHeadingId(headingPos, headingText)
-          this.options.onToggle(headingId)
-          // Force view update
+        if (targetHeading && targetHeading.hasContent) {
+          this.options.onToggle(targetHeading.id)
           this.editor.view.dispatch(
-            this.editor.state.tr.setMeta('collapsibleToggle', headingId)
+            this.editor.state.tr.setMeta(collapsiblePluginKey, { toggle: targetHeading.id })
           )
           return true
         }

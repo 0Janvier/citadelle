@@ -140,9 +140,166 @@
   @apply outline outline-2 outline-blue-500 outline-offset-2;
 }
 
-/* Images */
-.ProseMirror img {
+/* ============================================
+   RESIZABLE IMAGES (Images redimensionnables)
+   ============================================ */
+
+.ProseMirror .image-figure {
+  display: block;
+  margin: 1rem 0;
+  position: relative;
+  cursor: default;
+}
+
+.ProseMirror .image-figure.image-align-left {
+  text-align: left;
+}
+
+.ProseMirror .image-figure.image-align-center {
+  text-align: center;
+}
+
+.ProseMirror .image-figure.image-align-right {
+  text-align: right;
+}
+
+.ProseMirror .image-figure .resizable-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+/* Resize handle - bottom-right corner */
+.ProseMirror .image-figure .image-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.ProseMirror .image-figure .image-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--accent, #3b82f6);
+  border-bottom: 2px solid var(--accent, #3b82f6);
+  border-radius: 0 0 2px 0;
+}
+
+.ProseMirror .image-figure:hover .image-resize-handle,
+.ProseMirror .image-figure.resizing .image-resize-handle {
+  opacity: 1;
+}
+
+/* Selection outline on image */
+.ProseMirror .image-figure.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+/* Image toolbar (alignment buttons) */
+.ProseMirror .image-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg, white);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 3;
+}
+
+.ProseMirror .image-figure:hover .image-toolbar,
+.ProseMirror .image-figure.ProseMirror-selectednode .image-toolbar {
+  opacity: 1;
+}
+
+.dark .ProseMirror .image-toolbar {
+  background: var(--bg, #1f2937);
+  border-color: #374151;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.ProseMirror .image-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  transition: all 0.1s ease;
+}
+
+.ProseMirror .image-toolbar-btn:hover {
+  background: var(--bg-hover, #f3f4f6);
+  color: var(--text, #374151);
+}
+
+.ProseMirror .image-toolbar-btn.active {
+  background: var(--accent-light, #dbeafe);
+  color: var(--accent, #3b82f6);
+}
+
+.dark .ProseMirror .image-toolbar-btn {
+  color: var(--text-secondary, #9ca3af);
+}
+
+.dark .ProseMirror .image-toolbar-btn:hover {
+  background: var(--bg-hover, #374151);
+  color: var(--text, #e5e7eb);
+}
+
+.dark .ProseMirror .image-toolbar-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent, #60a5fa);
+}
+
+/* Resizing state */
+.ProseMirror .image-figure.resizing {
+  user-select: none;
+}
+
+.ProseMirror .image-figure.resizing .resizable-image {
+  opacity: 0.8;
+}
+
+/* Fallback for plain img tags */
+.ProseMirror img:not(.resizable-image) {
   @apply max-w-full h-auto rounded-lg my-4;
+}
+
+/* Print - clean image styling */
+@media print {
+  .ProseMirror .image-toolbar,
+  .ProseMirror .image-resize-handle {
+    display: none !important;
+  }
+
+  .ProseMirror .image-figure {
+    page-break-inside: avoid;
+  }
 }
 
 /* Focus state */
@@ -1603,8 +1760,96 @@
 .dark .ProseMirror h5 .legal-numbering { color: #fbbf24; }
 
 /* ============================================
+   FOOTNOTES (Notes de bas de page)
+   ============================================ */
+
+.ProseMirror .footnote-ref {
+  cursor: pointer;
+  display: inline;
+  position: relative;
+}
+
+.ProseMirror .footnote-ref:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 2px;
+}
+
+.ProseMirror .footnote-number {
+  font-size: 0.75em;
+  color: var(--accent, #3b82f6);
+  font-weight: 600;
+  padding: 0 1px;
+  cursor: pointer;
+}
+
+.ProseMirror .footnote-ref.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* Print - show footnotes as proper references */
+@media print {
+  .ProseMirror .footnote-ref {
+    cursor: default;
+  }
+
+  .ProseMirror .footnote-number {
+    color: black;
+  }
+}
+
+/* ============================================
    COMMENTS AND REVISIONS (Track Changes)
    ============================================ */
+
+/* Comment mark - TipTap comment extension */
+.comment-mark {
+  background-color: rgba(251, 191, 36, 0.3);
+  border-bottom: 2px solid #f59e0b;
+  cursor: pointer;
+  position: relative;
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+}
+
+.comment-mark:hover {
+  background-color: rgba(251, 191, 36, 0.5);
+}
+
+.dark .comment-mark {
+  background-color: rgba(251, 191, 36, 0.2);
+  border-bottom-color: #d97706;
+}
+
+.dark .comment-mark:hover {
+  background-color: rgba(251, 191, 36, 0.35);
+}
+
+/* Resolved comments - dimmed */
+.comment-mark.comment-resolved {
+  background-color: rgba(156, 163, 175, 0.15);
+  border-bottom-color: #9ca3af;
+}
+
+.comment-mark.comment-resolved:hover {
+  background-color: rgba(156, 163, 175, 0.25);
+}
+
+.dark .comment-mark.comment-resolved {
+  background-color: rgba(156, 163, 175, 0.1);
+  border-bottom-color: #6b7280;
+}
+
+.dark .comment-mark.comment-resolved:hover {
+  background-color: rgba(156, 163, 175, 0.2);
+}
+
+/* Hide comments toggle */
+.hide-comments .comment-mark {
+  background: none !important;
+  border-bottom: none !important;
+}
 
 .comment-highlight {
   background-color: rgba(251, 191, 36, 0.3);
@@ -1622,7 +1867,33 @@
   border-bottom-color: #d97706;
 }
 
-/* Track changes - insertions */
+/* Track changes - insertions (TipTap mark) */
+.track-insertion {
+  background-color: rgba(34, 197, 94, 0.2);
+  text-decoration: underline;
+  text-decoration-color: #22c55e;
+  color: #16a34a;
+}
+
+.dark .track-insertion {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+/* Track changes - deletions (TipTap mark) */
+.track-deletion {
+  background-color: rgba(239, 68, 68, 0.15);
+  text-decoration: line-through;
+  text-decoration-color: #ef4444;
+  color: #dc2626;
+}
+
+.dark .track-deletion {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+/* Legacy classes for backwards compat */
 .revision-inserted {
   background-color: rgba(34, 197, 94, 0.2);
   text-decoration: none;
@@ -1633,7 +1904,6 @@
   background-color: rgba(34, 197, 94, 0.15);
 }
 
-/* Track changes - deletions */
 .revision-deleted {
   background-color: rgba(239, 68, 68, 0.2);
   text-decoration: line-through;
@@ -1690,28 +1960,6 @@
 .dark .signature-preview {
   border-color: #4b5563;
   background: #1f2937;
-}
-
-/* ============================================
-   DEADLINE ALERTS (Alertes délais)
-   ============================================ */
-
-.deadline-overdue {
-  animation: pulse-red 2s infinite;
-}
-
-.deadline-urgent {
-  animation: pulse-orange 2s infinite;
-}
-
-@keyframes pulse-red {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-@keyframes pulse-orange {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
 }
 
 /* ============================================
@@ -1804,9 +2052,7 @@
   /* Masquer les éléments interactifs */
   .slash-command-popup,
   .comment-marker,
-  .variable-edit-popup,
-  .deadline-overdue,
-  .deadline-urgent {
+  .variable-edit-popup {
     display: none !important;
   }
 

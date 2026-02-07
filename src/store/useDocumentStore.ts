@@ -4,6 +4,24 @@ import { JSONContent } from '@tiptap/core'
 import { documentStorage } from '../lib/documentStorage'
 import { markdownToJson } from '../lib/markdownParser'
 
+export type DocumentType = 'conclusions' | 'assignation' | 'requete' | 'contrat' | 'courrier' | 'autre'
+
+export interface DocumentMetadata {
+  author?: string
+  caseNumber?: string
+  rgNumber?: string
+  jurisdiction?: string
+  parties?: {
+    demandeur?: string
+    defendeur?: string
+  }
+  documentType?: DocumentType
+  templateId?: string
+  createdAt: string
+  modifiedAt: string
+  tags?: string[]
+}
+
 export interface Document {
   id: string
   title: string
@@ -13,6 +31,7 @@ export interface Document {
   lastSaved: Date | null
   /** Version counter for efficient change detection (avoids JSON.stringify) */
   version: number
+  metadata?: DocumentMetadata
 }
 
 interface Session {
@@ -50,6 +69,9 @@ interface DocumentStore {
 
   // Get document by ID
   getDocument: (id: string) => Document | undefined
+
+  // Reorder documents (drag & drop tabs)
+  reorderDocuments: (fromIndex: number, toIndex: number) => void
 
   // Session management
   saveSession: () => Promise<void>
@@ -185,6 +207,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   getDocument: (id) => {
     const state = get()
     return state.documents.find((doc) => doc.id === id)
+  },
+
+  reorderDocuments: (fromIndex, toIndex) => {
+    set((state) => {
+      const docs = [...state.documents]
+      const [moved] = docs.splice(fromIndex, 1)
+      docs.splice(toIndex, 0, moved)
+      return { documents: docs }
+    })
   },
 
   saveSession: async () => {

@@ -1,6 +1,6 @@
 /**
- * Panneau de formatage pour la sidebar
- * Regroupe tous les outils de mise en forme du texte
+ * Panneau de formatage unifié pour la sidebar
+ * Regroupe tous les outils de mise en forme du texte + typographie
  */
 
 import { useState } from 'react'
@@ -35,7 +35,41 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Plus,
 } from 'lucide-react'
+
+// Polices disponibles
+const FONT_FAMILIES = [
+  { value: 'Garamond, serif', label: 'Garamond' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: 'Times New Roman, serif', label: 'Times' },
+  { value: 'Palatino, serif', label: 'Palatino' },
+  { value: 'Helvetica, Arial, sans-serif', label: 'Helvetica' },
+  { value: 'Arial, sans-serif', label: 'Arial' },
+  { value: 'Verdana, sans-serif', label: 'Verdana' },
+  { value: 'system-ui', label: 'Système' },
+]
+
+// Interlignes prédéfinis
+const LINE_HEIGHTS = [
+  { value: 1.0, label: '1' },
+  { value: 1.15, label: '1.15' },
+  { value: 1.5, label: '1.5' },
+  { value: 1.8, label: '1.8' },
+  { value: 2.0, label: '2' },
+]
+
+// Valeurs de retrait prédéfinies (en cm)
+const PARAGRAPH_INDENTS = [0, 0.5, 1, 1.5, 2]
+
+// Valeurs d'espacement entre paragraphes (en em)
+const PARAGRAPH_SPACINGS = [
+  { value: 0.5, label: '0.5' },
+  { value: 0.75, label: '0.75' },
+  { value: 1, label: '1' },
+  { value: 1.5, label: '1.5' },
+  { value: 2, label: '2' },
+]
 
 // Section pliable
 function Section({
@@ -112,6 +146,18 @@ export function FormattingPanel() {
   const pageZoom = usePageStore((state) => state.pageZoom)
   const setPageZoom = usePageStore((state) => state.setPageZoom)
 
+  // Typography settings
+  const fontSize = useSettingsStore((state) => state.fontSize)
+  const setFontSize = useSettingsStore((state) => state.setFontSize)
+  const fontFamily = useSettingsStore((state) => state.fontFamily)
+  const setFontFamily = useSettingsStore((state) => state.setFontFamily)
+  const lineHeight = useSettingsStore((state) => state.lineHeight)
+  const setLineHeight = useSettingsStore((state) => state.setLineHeight)
+  const paragraphIndent = useSettingsStore((state) => state.paragraphIndent)
+  const setParagraphIndent = useSettingsStore((state) => state.setParagraphIndent)
+  const paragraphSpacing = useSettingsStore((state) => state.paragraphSpacing)
+  const setParagraphSpacing = useSettingsStore((state) => state.setParagraphSpacing)
+
   // Settings
   const typewriterMode = useSettingsStore((state) => state.typewriterMode)
   const toggleTypewriterMode = useSettingsStore((state) => state.toggleTypewriterMode)
@@ -167,6 +213,74 @@ export function FormattingPanel() {
 
   return (
     <div className="h-full overflow-y-auto">
+      {/* Police de caractères */}
+      <Section title="Police">
+        {/* Sélecteur de famille */}
+        <div className="grid grid-cols-2 gap-1.5 mb-3">
+          {FONT_FAMILIES.map((font) => (
+            <button
+              key={font.value}
+              onClick={() => setFontFamily(font.value)}
+              className={`
+                px-2 py-1.5 rounded-md text-xs text-left transition-all truncate
+                ${fontFamily === font.value
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'border border-[var(--border)] hover:bg-[var(--bg-hover)]'
+                }
+              `}
+              style={{ fontFamily: font.value }}
+            >
+              {font.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Taille de police */}
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => setFontSize(Math.max(10, fontSize - 1))}
+            disabled={fontSize <= 10}
+            className="p-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--bg-hover)] disabled:opacity-40"
+            title="Réduire la taille"
+          >
+            <Minus size={14} />
+          </button>
+          <div className="flex-1 text-center text-sm font-medium">
+            {fontSize} px
+          </div>
+          <button
+            type="button"
+            onClick={() => setFontSize(Math.min(24, fontSize + 1))}
+            disabled={fontSize >= 24}
+            className="p-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--bg-hover)] disabled:opacity-40"
+            title="Augmenter la taille"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        {/* Interligne */}
+        <div className="flex gap-1">
+          {LINE_HEIGHTS.map((lh) => (
+            <button
+              key={lh.value}
+              onClick={() => setLineHeight(lh.value)}
+              className={`
+                flex-1 px-1 py-1.5 rounded-md text-xs transition-all
+                ${lineHeight === lh.value
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'border border-[var(--border)] hover:bg-[var(--bg-hover)]'
+                }
+              `}
+              title={`Interligne ${lh.label}`}
+            >
+              {lh.label}
+            </button>
+          ))}
+        </div>
+      </Section>
+
       {/* Styles de texte */}
       <Section title="Texte">
         <div className="flex flex-wrap gap-1">
@@ -290,6 +404,59 @@ export function FormattingPanel() {
           >
             <AlignJustify size={16} />
           </ToolButton>
+        </div>
+      </Section>
+
+      {/* Paragraphe - Retrait et espacement */}
+      <Section title="Paragraphe" defaultOpen={false}>
+        {/* Retrait première ligne */}
+        <div className="mb-3">
+          <label className="text-xs text-[var(--text-secondary)] mb-1.5 block">
+            Retrait 1re ligne
+          </label>
+          <div className="flex gap-1">
+            {PARAGRAPH_INDENTS.map((indent) => (
+              <button
+                key={indent}
+                onClick={() => setParagraphIndent(indent)}
+                className={`
+                  flex-1 px-1 py-1.5 rounded-md text-xs transition-all
+                  ${paragraphIndent === indent
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--border)] hover:bg-[var(--bg-hover)]'
+                  }
+                `}
+                title={indent === 0 ? 'Aucun retrait' : `${indent} cm`}
+              >
+                {indent === 0 ? '0' : `${indent}`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Espacement entre paragraphes */}
+        <div>
+          <label className="text-xs text-[var(--text-secondary)] mb-1.5 block">
+            Espacement
+          </label>
+          <div className="flex gap-1">
+            {PARAGRAPH_SPACINGS.map((sp) => (
+              <button
+                key={sp.value}
+                onClick={() => setParagraphSpacing(sp.value)}
+                className={`
+                  flex-1 px-1 py-1.5 rounded-md text-xs transition-all
+                  ${paragraphSpacing === sp.value
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--border)] hover:bg-[var(--bg-hover)]'
+                  }
+                `}
+                title={`Espacement ${sp.value}em`}
+              >
+                {sp.label}
+              </button>
+            ))}
+          </div>
         </div>
       </Section>
 

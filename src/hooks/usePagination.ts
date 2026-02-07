@@ -55,27 +55,65 @@ export function usePagination({
       return
     }
 
-    // Get all block-level elements using improved detection
+    // First-render guard: ensure the container is mounted and has content
+    if (proseMirrorDom.scrollHeight <= 0) {
+      requestAnimationFrame(() => {
+        calculatePageBreaks()
+      })
+      return
+    }
+
+    // Known block-level tag names (avoids costly getComputedStyle reflows)
+    const BLOCK_TAGS = new Set([
+      'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+      'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'LI',
+      'TABLE', 'THEAD', 'TBODY', 'TR',
+      'DIV', 'SECTION', 'ARTICLE', 'ASIDE', 'FIGURE',
+      'HR', 'DL', 'DD', 'DT', 'DETAILS', 'SUMMARY',
+    ])
+
     const getAllBlocks = (container: HTMLElement): HTMLElement[] => {
+      // Use querySelectorAll with a compound selector for top-level blocks,
+      // including figures, blockquotes, and custom div[data-type] elements
+      const selector = [
+        ':scope > p', ':scope > h1', ':scope > h2', ':scope > h3',
+        ':scope > h4', ':scope > h5', ':scope > h6',
+        ':scope > blockquote', ':scope > pre', ':scope > ul', ':scope > ol',
+        ':scope > table', ':scope > div', ':scope > section',
+        ':scope > article', ':scope > aside', ':scope > figure',
+        ':scope > hr', ':scope > dl', ':scope > details',
+        ':scope > [data-page-break]', ':scope > .page-break',
+        // Nested blocks that may not be direct children
+        'figure', 'blockquote', 'div[data-type]',
+      ].join(', ')
+
+      const allMatched = container.querySelectorAll(selector)
+      const seen = new Set<HTMLElement>()
       const result: HTMLElement[] = []
 
-      // First, get direct children that are block elements
-      const directChildren = Array.from(container.children) as HTMLElement[]
+      for (const node of allMatched) {
+        const el = node as HTMLElement
+        // Avoid duplicates (a direct child blockquote would match twice)
+        if (seen.has(el)) continue
+        seen.add(el)
 
-      for (const child of directChildren) {
-        // Check if it's a page break
-        if (child.hasAttribute('data-page-break') || child.classList.contains('page-break')) {
-          result.push(child)
+        if (el.hasAttribute('data-page-break') || el.classList.contains('page-break')) {
+          result.push(el)
           continue
         }
 
-        // Check if it's a block-level element
-        const display = getComputedStyle(child).display
-        if (display === 'block' || display === 'list-item' || display === 'table' ||
-            display === 'flex' || display === 'grid') {
-          result.push(child)
+        if (BLOCK_TAGS.has(el.tagName) || el.hasAttribute('data-type')) {
+          result.push(el)
         }
       }
+
+      // Sort by vertical position so pagination flows top-to-bottom
+      const containerRect = container.getBoundingClientRect()
+      result.sort((a, b) => {
+        const aTop = a.getBoundingClientRect().top - containerRect.top
+        const bTop = b.getBoundingClientRect().top - containerRect.top
+        return aTop - bTop
+      })
 
       return result
     }
@@ -106,6 +144,7 @@ export function usePagination({
     let currentPageStart = 0
     let currentHeight = 0
     let pageIndex = 0
+    let prevBottomMargin = 0
 
     // Get the container's offset to calculate relative positions
     const containerRect = proseMirrorDom.getBoundingClientRect()
@@ -116,6 +155,16 @@ export function usePagination({
       const rect = block.getBoundingClientRect()
       const blockTop = rect.top - containerRect.top + containerTop
       const blockHeight = rect.height
+
+      // Read computed margins for proper margin collapsing
+      const style = getComputedStyle(block)
+      const marginTop = parseFloat(style.marginTop) || 0
+      const marginBottom = parseFloat(style.marginBottom) || 0
+
+      // CSS margin collapsing: adjacent vertical margins collapse to the larger of the two
+      const collapsedMargin = currentHeight > 0
+        ? Math.max(prevBottomMargin, marginTop)
+        : marginTop
 
       // Check for manual page break
       if (block.hasAttribute('data-page-break') || block.classList.contains('page-break')) {
@@ -128,11 +177,13 @@ export function usePagination({
         })
         currentPageStart = blockTop + blockHeight
         currentHeight = 0
+        prevBottomMargin = 0
         continue
       }
 
-      // Check if block fits on current page
-      if (currentHeight + blockHeight > contentHeight && currentHeight > 0) {
+      // Check if block fits on current page (use collapsed height minus trailing margin for fit check)
+      const heightToCheck = blockHeight + collapsedMargin
+      if (currentHeight + heightToCheck > contentHeight && currentHeight > 0) {
         // Start new page before this block
         newPages.push({
           index: pageIndex++,
@@ -141,9 +192,11 @@ export function usePagination({
           hasManualBreak: false,
         })
         currentPageStart = blockTop
-        currentHeight = blockHeight
+        currentHeight = blockHeight + marginTop + marginBottom
+        prevBottomMargin = marginBottom
       } else {
-        currentHeight += blockHeight
+        currentHeight += heightToCheck
+        prevBottomMargin = marginBottom
       }
     }
 

@@ -1,6 +1,11 @@
 /**
  * Système d'affichage de pages inspiré de Word
- * Architecture: UN SEUL éditeur toujours monté, positionné sur la page active
+ *
+ * Architecture: UN SEUL éditeur toujours monté, positionné sur la page active.
+ * La page active change automatiquement selon:
+ * - La position du curseur (selectionUpdate)
+ * - Le scroll (page la plus centrale après arrêt du scroll)
+ * - Le clic sur une page inactive
  */
 
 import { useRef, useMemo, useState, useEffect, useCallback, forwardRef } from 'react'
@@ -10,6 +15,7 @@ import { useDocumentStore } from '../../store/useDocumentStore'
 import { PageHeader } from './PageHeader'
 import { PageFooter } from './PageFooter'
 import { PageStatusBar } from './PageStatusBar'
+import { LetterheadOverlay } from '../LetterheadOverlay'
 
 interface PageViewSystemProps {
   documentId: string
@@ -25,6 +31,9 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isAutoScrollingRef = useRef(false)
+  const currentEditPageRef = useRef(0)
 
   const [containerWidth, setContainerWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -32,6 +41,9 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
   const [editorHeight, setEditorHeight] = useState(0)
   const [currentEditPage, setCurrentEditPage] = useState(0)
   const [contentHtml, setContentHtml] = useState('')
+
+  // Keep ref in sync with state
+  useEffect(() => { currentEditPageRef.current = currentEditPage }, [currentEditPage])
 
   // Document
   const document = useDocumentStore((state) =>
@@ -101,24 +113,18 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
     const initObserver = () => {
       const editorDom = editor.view?.dom as HTMLElement
       if (editorDom) {
-        // Mise à jour initiale immédiate
         updateState()
-
-        // ResizeObserver pour les changements de taille
         resizeObserver = new ResizeObserver(throttledUpdate)
         resizeObserver.observe(editorDom)
       }
     }
 
-    // Attendre que le DOM de l'éditeur soit disponible
     if (editor.view?.dom) {
       initObserver()
     } else {
-      // L'éditeur n'est pas encore monté, attendre le prochain frame
       rafId = requestAnimationFrame(initObserver)
     }
 
-    // Écouter les changements de contenu
     editor.on('update', throttledUpdate)
 
     return () => {
@@ -166,37 +172,134 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Scroll
+  // Calculated row height for scroll calculations
+  const scaledPageHeight = pageHeight * pageZoom
+  const rowHeight = scaledPageHeight + 40
+
+  // Scroll handler with debounced auto-switch
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return
     const scrollTop = containerRef.current.scrollTop
-    const scaledPageHeight = pageHeight * pageZoom
-    const rowHeight = scaledPageHeight + 40
     const row = Math.floor((scrollTop + 32) / rowHeight)
     const pageIndex = row * effectivePagesPerRow
-    if (pageIndex !== currentPage && pageIndex < totalPages) {
+
+    if (pageIndex !== currentPage && pageIndex >= 0 && pageIndex < totalPages) {
       setCurrentPage(pageIndex)
     }
-  }, [pageHeight, pageZoom, effectivePagesPerRow, currentPage, totalPages])
 
+    // Skip auto-switch during programmatic scrolling (to avoid feedback loop)
+    if (isAutoScrollingRef.current) return
+
+    // Debounced: after scroll stops, activate the most-centered page
+    if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current)
+    scrollIdleTimerRef.current = setTimeout(() => {
+      if (!containerRef.current || isAutoScrollingRef.current) return
+      const st = containerRef.current.scrollTop
+      const vh = containerRef.current.clientHeight
+      const centerY = st + vh / 2
+      const centerRow = Math.floor(centerY / rowHeight)
+      const centerPage = Math.min(
+        Math.max(0, centerRow * effectivePagesPerRow),
+        totalPages - 1
+      )
+
+      if (centerPage !== currentEditPageRef.current) {
+        setCurrentEditPage(centerPage)
+      }
+    }, 200)
+  }, [rowHeight, effectivePagesPerRow, currentPage, totalPages])
+
+  // Navigate to a specific page (smooth scroll)
   const scrollToPage = useCallback((pageIndex: number) => {
     if (!containerRef.current || pageIndex < 0 || pageIndex >= totalPages) return
-    const scaledPageHeight = pageHeight * pageZoom
-    const rowHeight = scaledPageHeight + 40
+
+    isAutoScrollingRef.current = true
+
     const targetRow = Math.floor(pageIndex / effectivePagesPerRow)
     containerRef.current.scrollTo({
       top: 32 + targetRow * rowHeight,
       behavior: 'smooth',
     })
-    setCurrentPage(pageIndex)
-  }, [totalPages, pageHeight, pageZoom, effectivePagesPerRow])
 
-  // Clic sur une page
-  const handlePageClick = useCallback((pageIndex: number) => {
+    setCurrentPage(pageIndex)
+
+    // Reset auto-scroll flag after animation
+    setTimeout(() => {
+      isAutoScrollingRef.current = false
+    }, 500)
+  }, [totalPages, rowHeight, effectivePagesPerRow])
+
+  // ========================================================================
+  // Auto-switch page based on cursor position (typing across page boundaries)
+  // ========================================================================
+  useEffect(() => {
+    if (!editor) return
+
+    const handleSelectionUpdate = () => {
+      if (!editorWrapperRef.current) return
+
+      try {
+        const { head } = editor.state.selection
+        const coords = editor.view.coordsAtPos(head)
+        const wrapperRect = editorWrapperRef.current.getBoundingClientRect()
+
+        // Cursor position within the editor wrapper (viewport-relative)
+        const cursorInWrapper = coords.top - wrapperRect.top
+        // Convert to absolute position in the full editor content
+        const cursorInContent = cursorInWrapper + currentEditPageRef.current * availableContentHeight
+
+        const targetPage = Math.max(0, Math.min(
+          Math.floor(cursorInContent / availableContentHeight),
+          totalPages - 1
+        ))
+
+        if (targetPage !== currentEditPageRef.current) {
+          setCurrentEditPage(targetPage)
+          scrollToPage(targetPage)
+        }
+      } catch {
+        // coordsAtPos can throw for some edge cases
+      }
+    }
+
+    editor.on('selectionUpdate', handleSelectionUpdate)
+    return () => { editor.off('selectionUpdate', handleSelectionUpdate) }
+  }, [editor, availableContentHeight, totalPages, scrollToPage])
+
+  // ========================================================================
+  // Click on a non-active page: activate + position cursor at click point
+  // ========================================================================
+  const handlePageClick = useCallback((pageIndex: number, event: React.MouseEvent) => {
+    if (pageIndex === currentEditPageRef.current) return
+
+    const clickX = event.clientX
+    const clickY = event.clientY
+
     setCurrentEditPage(pageIndex)
-    editor?.commands.focus()
+
+    // After React re-renders the editor on the new page, position cursor
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (!editor) return
+        try {
+          const pos = editor.view.posAtCoords({ left: clickX, top: clickY })
+          if (pos) {
+            editor.commands.setTextSelection(pos.pos)
+          }
+        } catch {
+          // Fallback: just focus
+        }
+        editor.commands.focus()
+      }, 30)
+    })
   }, [editor])
 
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current)
+    }
+  }, [])
 
   // Enregistrer les refs des pages
   const setPageRef = useCallback((pageIndex: number, el: HTMLDivElement | null) => {
@@ -212,7 +315,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
     return Array.from({ length: totalPages }, (_, i) => i)
   }, [totalPages])
 
-  // Calcul de la position de l'éditeur
+  // Calcul de la position de l'éditeur (clip)
   const clipTop = currentEditPage * availableContentHeight
 
   if (!editor || !document) {
@@ -225,7 +328,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
 
   return (
     <div className="page-view-system flex-1 flex flex-col overflow-hidden bg-[var(--bg-secondary)]" style={{ position: 'relative' }}>
-      {/* Conteneur scrollable avec ascenseur */}
+      {/* Conteneur scrollable */}
       <div
         ref={containerRef}
         className="page-view-container"
@@ -235,7 +338,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
           top: 0,
           left: 0,
           right: 0,
-          bottom: 32, // Espace pour la barre de statut
+          bottom: 32,
           overflow: 'auto',
         }}
       >
@@ -247,7 +350,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
             gap: '40px',
             justifyContent: 'center',
             padding: '32px',
-            paddingBottom: '64px', // Espace en bas pour le scroll
+            paddingBottom: '64px',
           }}
         >
           {pageIndices.map((pageIndex) => (
@@ -271,7 +374,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
               documentTitle={document.title}
               totalPages={totalPages}
               contentHtml={contentHtml}
-              onClick={() => handlePageClick(pageIndex)}
+              onClick={(e) => handlePageClick(pageIndex, e)}
             >
               {/* L'éditeur réel est rendu uniquement dans la page active */}
               {pageIndex === currentEditPage && (
@@ -295,7 +398,7 @@ export function PageViewSystem({ documentId, editor }: PageViewSystemProps) {
         </div>
       </div>
 
-      {/* Barre de statut style Word - positionnée en bas */}
+      {/* Barre de statut style Word */}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
         <PageStatusBar
           currentPage={currentPage}
@@ -332,7 +435,7 @@ interface PageFrameProps {
   documentTitle: string
   totalPages: number
   contentHtml: string
-  onClick: () => void
+  onClick: (event: React.MouseEvent) => void
   children?: React.ReactNode
 }
 
@@ -380,12 +483,13 @@ const PageFrame = forwardRef<HTMLDivElement, PageFrameProps>(function PageFrame(
           transformOrigin: 'top left',
           background: 'var(--editor-bg, white)',
           boxShadow: isActive
-            ? '0 0 0 3px var(--accent), 0 4px 20px rgba(0, 0, 0, 0.2)'
+            ? '0 0 0 2px var(--accent), 0 4px 20px rgba(0, 0, 0, 0.2)'
             : '0 2px 12px rgba(0, 0, 0, 0.15)',
           borderRadius: '2px',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          transition: 'box-shadow 0.15s ease',
         }}
       >
         <div
@@ -408,14 +512,18 @@ const PageFrame = forwardRef<HTMLDivElement, PageFrameProps>(function PageFrame(
             />
           )}
 
+          {/* Cartouche cabinet sur la première page uniquement */}
+          {pageIndex === 0 && <LetterheadOverlay />}
+
           <div
+            data-content-viewport
             style={{
               flex: 1,
               overflow: 'hidden',
               position: 'relative',
             }}
           >
-            {/* Contenu miroir (toujours affiché en arrière-plan) */}
+            {/* Contenu miroir (affiché quand la page n'est pas active) */}
             <div
               className="ProseMirror page-content-mirror"
               style={{

@@ -179,6 +179,9 @@ export function CodeBrowser({ onClose }: CodeBrowserProps) {
                 <li>• Code de procédure civile - Procédures, délais</li>
                 <li>• CRPA - Relations avec l'administration</li>
                 <li>• Code pénal - Infractions, sanctions</li>
+                <li>• Code du travail - Contrats, licenciement, durée</li>
+                <li>• Code de commerce - Baux, sociétés, procédures</li>
+                <li>• Code de la consommation - Clauses, rétractation</li>
               </ul>
             </div>
           </div>
@@ -318,6 +321,12 @@ function getCodeBadgeColor(code: CodeType): string {
       return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
     case 'penal':
       return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+    case 'travail':
+      return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300'
+    case 'commerce':
+      return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+    case 'consommation':
+      return 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300'
     default:
       return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
   }

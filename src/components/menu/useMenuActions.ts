@@ -136,6 +136,11 @@ export function useMenuActions() {
     await exportToPDF(activeDocumentId)
   }, [activeDocumentId, exportToPDF])
 
+  const setPdfExportSettingsOpen = useEditorStore((s) => s.setPdfExportSettingsOpen)
+  const openPdfExportSettings = useCallback(() => {
+    setPdfExportSettingsOpen(true)
+  }, [setPdfExportSettingsOpen])
+
   const exportDOCX = useCallback(async () => {
     if (!activeDocumentId) return
     const doc = useDocumentStore.getState().getDocument(activeDocumentId)
@@ -211,6 +216,7 @@ export function useMenuActions() {
     exportHTML,
     exportPDF,
     exportDOCX,
+    openPdfExportSettings,
 
     // Edit actions
     undo,
@@ -256,8 +262,6 @@ export function useMenuActions() {
     toggleClausesPanel: () => togglePanel('clauses'),
     toggleVariablesPanel: () => togglePanel('variables'),
     toggleCodesPanel: () => togglePanel('codes'),
-    toggleDeadlinesPanel: () => togglePanel('deadlines'),
-    toggleTypographyPanel: () => togglePanel('typography'),
     togglePageLayoutPanel: () => togglePanel('pageLayout'),
 
     // Settings

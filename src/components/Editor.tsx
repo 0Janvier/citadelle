@@ -3,6 +3,7 @@ import { useEffect, useRef, useMemo, useCallback } from 'react'
 import { extensions } from '../editor/extensions'
 import { TypewriterExtension } from '../editor/TypewriterExtension'
 import { CollapsibleHeadingsExtension } from '../editor/CollapsibleHeadingsExtension'
+import { useShallow } from 'zustand/react/shallow'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useEditorStore } from '../store/useEditorStore'
@@ -27,21 +28,34 @@ export function Editor({ documentId }: EditorProps) {
   const updateContent = useDocumentStore((state) => state.updateContent)
   const markAsDirty = useDocumentStore((state) => state.markAsDirty)
 
-  const fontSize = useSettingsStore((state) => state.fontSize)
-  const fontFamily = useSettingsStore((state) => state.fontFamily)
-  const lineHeight = useSettingsStore((state) => state.lineHeight)
-  const paragraphIndent = useSettingsStore((state) => state.paragraphIndent)
-  const paragraphSpacing = useSettingsStore((state) => state.paragraphSpacing)
-  const wordWrap = useSettingsStore((state) => state.wordWrap)
-  const typewriterMode = useSettingsStore((state) => state.typewriterMode)
-  const typewriterDimOpacity = useSettingsStore((state) => state.typewriterDimOpacity)
-  const typewriterHighlightStyle = useSettingsStore((state) => state.typewriterHighlightStyle)
-  const typewriterScrollPosition = useSettingsStore((state) => state.typewriterScrollPosition)
-  const typewriterMarkLine = useSettingsStore((state) => state.typewriterMarkLine)
+  const {
+    fontSize, fontFamily, lineHeight,
+    paragraphIndent, paragraphSpacing, wordWrap,
+    typewriterMode, typewriterDimOpacity,
+    typewriterHighlightStyle, typewriterScrollPosition, typewriterMarkLine,
+    spellcheckEnabled,
+  } = useSettingsStore(useShallow((state) => ({
+    fontSize: state.fontSize,
+    fontFamily: state.fontFamily,
+    lineHeight: state.lineHeight,
+    paragraphIndent: state.paragraphIndent,
+    paragraphSpacing: state.paragraphSpacing,
+    wordWrap: state.wordWrap,
+    typewriterMode: state.typewriterMode,
+    typewriterDimOpacity: state.typewriterDimOpacity,
+    typewriterHighlightStyle: state.typewriterHighlightStyle,
+    typewriterScrollPosition: state.typewriterScrollPosition,
+    typewriterMarkLine: state.typewriterMarkLine,
+    spellcheckEnabled: state.spellcheckEnabled,
+  })))
+
   const setActiveEditor = useEditorStore((state) => state.setActiveEditor)
-  const viewMode = usePageStore((state) => state.viewMode)
-  const showScrollPageBreaks = usePageStore((state) => state.showScrollPageBreaks)
-  const scrollPageBreakStyle = usePageStore((state) => state.scrollPageBreakStyle)
+
+  const { viewMode, showScrollPageBreaks, scrollPageBreakStyle } = usePageStore(useShallow((state) => ({
+    viewMode: state.viewMode,
+    showScrollPageBreaks: state.showScrollPageBreaks,
+    scrollPageBreakStyle: state.scrollPageBreakStyle,
+  })))
 
   // Collapsible headings state
   const toggleSection = useCollapsibleStore((state) => state.toggleSection)
@@ -99,6 +113,8 @@ export function Editor({ documentId }: EditorProps) {
     },
     editorProps: {
       attributes: {
+        spellcheck: spellcheckEnabled ? 'true' : 'false',
+        lang: 'fr',
         class: `prose prose-lg dark:prose-invert max-w-none focus:outline-none ${typewriterMode ? `typewriter-mode scroll-${typewriterScrollPosition}` : ''}`,
         style: `
           font-size: ${fontSize}px;

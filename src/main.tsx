@@ -3,6 +3,25 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './styles/index.css'
 
+// Debug: log au démarrage
+console.log('[Citadelle] main.tsx starting...')
+console.log('[Citadelle] Location:', window.location.href)
+console.log('[Citadelle] User Agent:', navigator.userAgent)
+console.log('[Citadelle] Tauri available:', typeof (window as unknown as Record<string, unknown>).__TAURI__ !== 'undefined')
+console.log('[Citadelle] Tauri IPC:', typeof (window as unknown as Record<string, unknown>).__TAURI_IPC__ !== 'undefined')
+window.onerror = (msg, url, line, col, error) => {
+  console.error('[Citadelle] Global error:', { msg, url, line, col, error })
+  const root = document.getElementById('root')
+  if (root) {
+    root.innerHTML = `<div style="padding:20px;font-family:system-ui;color:red;">
+      <h2>Erreur JavaScript</h2>
+      <pre>${msg}\n${url}:${line}:${col}\n${error?.stack || ''}</pre>
+    </div>`
+  }
+  return false
+}
+console.log('[Citadelle] Error handler installed')
+
 // Error Boundary pour capturer les erreurs de rendu
 interface ErrorBoundaryState {
   hasError: boolean
@@ -68,10 +87,27 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+console.log('[Citadelle] About to mount React...')
+const rootElement = document.getElementById('root')
+console.log('[Citadelle] Root element:', rootElement)
+
+if (rootElement) {
+  try {
+    console.log('[Citadelle] Creating React root...')
+    const root = ReactDOM.createRoot(rootElement)
+    console.log('[Citadelle] Rendering App...')
+    root.render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>,
+    )
+    console.log('[Citadelle] React render called successfully')
+  } catch (e) {
+    console.error('[Citadelle] Error during React mount:', e)
+    rootElement.innerHTML = `<div style="padding:20px;color:red;"><h2>Erreur de montage</h2><pre>${e}</pre></div>`
+  }
+} else {
+  console.error('[Citadelle] Root element not found!')
+}

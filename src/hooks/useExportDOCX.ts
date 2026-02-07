@@ -19,12 +19,18 @@ import {
   PageNumber,
   TabStopPosition,
   TabStopType,
+  ImageRun,
+  FootnoteReferenceRun,
+  TableOfContents,
 } from 'docx'
 import { save } from '@tauri-apps/api/dialog'
 import { writeBinaryFile } from '@tauri-apps/api/fs'
 import { useToast } from './useToast'
+import { useEditorStore } from '../store/useEditorStore'
+import { useDocumentStore } from '../store/useDocumentStore'
 import { useLawyerProfileStore, type LawyerProfile } from '../store/useLawyerProfileStore'
 import { useDocumentCounterStore } from '../store/useDocumentCounterStore'
+import { useVersionStore } from '../store/useVersionStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import type { JSONContent } from '@tiptap/react'
 import type { ExportTemplate, HeaderFooter } from '../types/templates'
@@ -41,6 +47,7 @@ interface ExportDOCXOptions {
   template?: ExportTemplate
   includeLetterhead?: boolean
   includeSignature?: boolean
+  includeLogo?: boolean
   // Deprecated, kept for backward compatibility
   includeHeader?: boolean
   includeFooter?: boolean
@@ -60,8 +67,20 @@ function mapHeadingLevel(level: number): typeof HeadingLevel[keyof typeof Headin
   }
 }
 
+// Footnote collector for DOCX export - instantiated per-export to avoid shared state
+class FootnoteCollector {
+  footnotes: { id: number; content: string }[] = []
+  counter: number = 0
+
+  add(content: string): number {
+    this.counter++
+    this.footnotes.push({ id: this.counter, content })
+    return this.counter
+  }
+}
+
 // Convertir le contenu TipTap en éléments docx
-function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent: number; paragraphSpacing: number }): (Paragraph | Table)[] {
+function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent: number; paragraphSpacing: number }, footnoteCollector?: FootnoteCollector): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = []
 
   if (!content.content) return elements
@@ -77,7 +96,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
   for (const node of content.content) {
     switch (node.type) {
       case 'paragraph': {
-        const textRuns = convertInlineContent(node.content || [])
+        const textRuns = convertInlineContent(node.content || [], footnoteCollector)
         // Récupérer l'alignement du paragraphe
         const textAlign = node.attrs?.textAlign as string | undefined
         let alignment: typeof AlignmentType[keyof typeof AlignmentType] | undefined
@@ -105,7 +124,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
 
       case 'heading': {
         const level = node.attrs?.level || 1
-        const textRuns = convertInlineContent(node.content || [])
+        const textRuns = convertInlineContent(node.content || [], footnoteCollector)
         // Récupérer l'alignement du titre
         const textAlign = node.attrs?.textAlign as string | undefined
         let alignment: typeof AlignmentType[keyof typeof AlignmentType] | undefined
@@ -122,8 +141,26 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
           default:
             alignment = AlignmentType.LEFT
         }
+        // Apply heading color
+        const headingColors: Record<number, string> = {
+          1: '1B2A4A', 2: '1B2A4A', 3: '2E5090', 4: '4A4A4A',
+        }
+        const hColor = headingColors[level]
+        const coloredRuns = hColor
+          ? textRuns.map((run) => {
+              if (run instanceof TextRun) {
+                return new TextRun({
+                  text: (run as unknown as { options: { text: string } }).options?.text || '',
+                  bold: true,
+                  color: hColor,
+                  size: level === 1 ? 32 : level === 2 ? 28 : level === 3 ? 24 : 22,
+                })
+              }
+              return run
+            })
+          : textRuns
         elements.push(new Paragraph({
-          children: textRuns,
+          children: coloredRuns,
           heading: mapHeadingLevel(level),
           alignment,
           spacing: { before: 400, after: 200 },
@@ -135,7 +172,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
         const items = node.content || []
         for (const item of items) {
           if (item.type === 'listItem') {
-            const textRuns = convertInlineContent(item.content?.[0]?.content || [])
+            const textRuns = convertInlineContent(item.content?.[0]?.content || [], footnoteCollector)
             elements.push(new Paragraph({
               children: textRuns,
               bullet: { level: 0 },
@@ -151,7 +188,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
         for (let i = 0; i < items.length; i++) {
           const item = items[i]
           if (item.type === 'listItem') {
-            const textRuns = convertInlineContent(item.content?.[0]?.content || [])
+            const textRuns = convertInlineContent(item.content?.[0]?.content || [], footnoteCollector)
             elements.push(new Paragraph({
               children: [
                 new TextRun({ text: `${i + 1}. ` }),
@@ -167,7 +204,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
       case 'blockquote': {
         const paragraphs = node.content || []
         for (const p of paragraphs) {
-          const textRuns = convertInlineContent(p.content || [])
+          const textRuns = convertInlineContent(p.content || [], footnoteCollector)
           elements.push(new Paragraph({
             children: textRuns,
             indent: { left: 720 }, // 0.5 inch
@@ -188,7 +225,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
           if (row.type === 'tableRow') {
             const cells: TableCell[] = []
             for (const cell of row.content || []) {
-              const textRuns = convertInlineContent(cell.content?.[0]?.content || [])
+              const textRuns = convertInlineContent(cell.content?.[0]?.content || [], footnoteCollector)
               cells.push(new TableCell({
                 children: [new Paragraph({ children: textRuns })],
                 width: { size: 100 / (row.content?.length || 1), type: WidthType.PERCENTAGE },
@@ -238,7 +275,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
         for (const item of items) {
           if (item.type === 'taskItem') {
             const checked = item.attrs?.checked ? '☑ ' : '☐ '
-            const textRuns = convertInlineContent(item.content?.[0]?.content || [])
+            const textRuns = convertInlineContent(item.content?.[0]?.content || [], footnoteCollector)
             elements.push(new Paragraph({
               children: [
                 new TextRun({ text: checked }),
@@ -252,19 +289,56 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
       }
 
       case 'image': {
-        // Les images ne sont pas facilement supportées dans docx sans base64
-        // On ajoute un placeholder avec le texte alternatif
-        const alt = node.attrs?.alt || 'Image'
-        elements.push(new Paragraph({
-          children: [
-            new TextRun({
-              text: `[Image: ${alt}]`,
-              italics: true,
-              color: '666666',
-            }),
-          ],
-          spacing: { after: 200 },
-        }))
+        const imgSrc = node.attrs?.src || ''
+        const imgAlt = node.attrs?.alt || 'Image'
+        const imgAlignment = node.attrs?.alignment === 'left' ? AlignmentType.LEFT
+          : node.attrs?.alignment === 'right' ? AlignmentType.RIGHT
+          : AlignmentType.CENTER
+        const imgWidth = typeof node.attrs?.width === 'number' ? node.attrs.width
+          : parseInt(node.attrs?.width) || 400
+
+        if (imgSrc.startsWith('data:')) {
+          try {
+            const imgData = base64ToUint8Array(imgSrc)
+            const imgType = imgSrc.includes('image/png') ? 'png' as const : 'jpg' as const
+            elements.push(new Paragraph({
+              children: [
+                new ImageRun({
+                  data: imgData,
+                  transformation: {
+                    width: imgWidth,
+                    height: Math.round(imgWidth * 0.75),
+                  },
+                  type: imgType,
+                }),
+              ],
+              alignment: imgAlignment,
+              spacing: { after: 200 },
+            }))
+          } catch {
+            elements.push(new Paragraph({
+              children: [
+                new TextRun({
+                  text: `[Image: ${imgAlt}]`,
+                  italics: true,
+                  color: '666666',
+                }),
+              ],
+              spacing: { after: 200 },
+            }))
+          }
+        } else {
+          elements.push(new Paragraph({
+            children: [
+              new TextRun({
+                text: `[Image: ${imgAlt}]`,
+                italics: true,
+                color: '666666',
+              }),
+            ],
+            spacing: { after: 200 },
+          }))
+        }
         break
       }
     }
@@ -277,10 +351,18 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
 type HighlightColor = 'yellow' | 'green' | 'blue' | 'cyan' | 'magenta' | 'red' | 'darkBlue' | 'darkCyan' | 'darkGreen' | 'darkMagenta' | 'darkRed' | 'darkYellow' | 'lightGray' | 'darkGray' | 'black' | 'white' | 'none'
 
 // Convertir le contenu inline (texte, bold, italic, etc.)
-function convertInlineContent(content: JSONContent[]): TextRun[] {
-  const runs: TextRun[] = []
+function convertInlineContent(content: JSONContent[], footnoteCollector?: FootnoteCollector): (TextRun | FootnoteReferenceRun)[] {
+  const runs: (TextRun | FootnoteReferenceRun)[] = []
 
   for (const node of content) {
+    if (node.type === 'footnote') {
+      const fnId = footnoteCollector
+        ? footnoteCollector.add((node.attrs?.content as string) || '')
+        : 0
+      runs.push(new FootnoteReferenceRun(fnId))
+      continue
+    }
+
     if (node.type === 'text') {
       const marks = node.marks || []
       const options: {
@@ -352,6 +434,12 @@ function convertInlineContent(content: JSONContent[]): TextRun[] {
             break
           case 'superscript':
             options.superScript = true
+            break
+          case 'textStyle':
+            if (mark.attrs?.color) {
+              // Strip '#' prefix for DOCX hex color
+              options.color = (mark.attrs.color as string).replace('#', '')
+            }
             break
         }
       }
@@ -528,9 +616,25 @@ function createTemplateFooter(
 }
 
 /**
- * Crée un header avec l'en-tête du profil avocat
+ * Convertit une image base64 en Uint8Array pour docx
  */
-function createLawyerProfileHeader(profile: LawyerProfile): Header {
+function base64ToUint8Array(base64: string): Uint8Array {
+  // Supprimer le préfixe data:image/...;base64, si présent
+  const base64Data = base64.includes(',') ? base64.split(',')[1] : base64
+
+  // Décoder le base64
+  const binaryString = atob(base64Data)
+  const bytes = new Uint8Array(binaryString.length)
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i)
+  }
+  return bytes
+}
+
+/**
+ * Crée un header avec l'en-tête du profil avocat (avec logo optionnel)
+ */
+function createLawyerProfileHeader(profile: LawyerProfile, includeLogo: boolean = true): Header {
   const fullName = [profile.civilite, profile.prenom, profile.nom].filter(Boolean).join(' ')
   const fullAddress = [
     profile.adresse,
@@ -542,6 +646,29 @@ function createLawyerProfileHeader(profile: LawyerProfile): Header {
   if (profile.email) contactLines.push(profile.email)
 
   const paragraphs: Paragraph[] = []
+
+  // Ajouter le logo si disponible et activé
+  if (includeLogo && profile.logo && profile.afficherLogoEntete) {
+    try {
+      const logoData = base64ToUint8Array(profile.logo)
+      paragraphs.push(new Paragraph({
+        children: [
+          new ImageRun({
+            data: logoData,
+            transformation: {
+              width: 100,
+              height: 50,
+            },
+            type: 'png', // ou 'jpg' selon le format
+          }),
+        ],
+        alignment: AlignmentType.LEFT,
+        spacing: { after: 200 },
+      }))
+    } catch (e) {
+      console.warn('Impossible de charger le logo dans le DOCX:', e)
+    }
+  }
 
   if (profile.cabinet) {
     paragraphs.push(new Paragraph({
@@ -619,16 +746,20 @@ export function useExportDOCX() {
         template,
         includeLetterhead = options.includeHeader ?? true,
         includeSignature = options.includeFooter ?? true,
+        includeLogo = true,
       } = options
 
       // Récupérer les paramètres de typographie
       const typographySettings = useSettingsStore.getState()
 
+      // Create a local footnote collector for this export (avoids shared module-level state)
+      const footnoteCollector = new FootnoteCollector()
+
       // Convertir le contenu
       const docElements = convertContentToDocx(content, {
         paragraphIndent: typographySettings.paragraphIndent,
         paragraphSpacing: typographySettings.paragraphSpacing,
-      })
+      }, footnoteCollector)
 
       // Calculer les marges de page
       let pageMargins = {
@@ -668,6 +799,14 @@ export function useExportDOCX() {
         return null
       }
 
+      // Auto-snapshot avant export DOCX
+      const activeDocId = useDocumentStore.getState().activeDocumentId
+      if (activeDocId) {
+        useVersionStore.getState().createVersion(activeDocId, 'Avant export DOCX', content, true)
+      }
+
+      useEditorStore.getState().setExporting(true, 'docx')
+
       // Générer le numéro de document (incrémente le compteur)
       const documentNumber = useDocumentCounterStore.getState().getNextNumber()
 
@@ -677,7 +816,7 @@ export function useExportDOCX() {
 
       // Header: letterhead remplace le template header
       if (includeLetterhead && (lawyerProfile.cabinet || lawyerProfile.nom)) {
-        headers = { default: createLawyerProfileHeader(lawyerProfile) }
+        headers = { default: createLawyerProfileHeader(lawyerProfile, includeLogo) }
       } else if (template?.header.enabled) {
         headers = { default: createTemplateHeader(template.header, title, documentNumber) }
       }
@@ -689,11 +828,20 @@ export function useExportDOCX() {
         footers = { default: createBasicPageNumberFooter() }
       }
 
+      // Build footnotes for the Document
+      const footnotes: Record<number, { children: Paragraph[] }> = {}
+      for (const fn of footnoteCollector.footnotes) {
+        footnotes[fn.id] = {
+          children: [new Paragraph({ children: [new TextRun({ text: fn.content, size: 18 })] })],
+        }
+      }
+
       // Créer le document
       const doc = new Document({
         creator: author,
         title,
         description: 'Document généré par Citadelle',
+        footnotes: Object.keys(footnotes).length > 0 ? footnotes : undefined,
         sections: [
           {
             properties: {
@@ -704,7 +852,13 @@ export function useExportDOCX() {
             },
             headers,
             footers,
-            children: docElements,
+            children: [
+              new TableOfContents('Table des matières', {
+                hyperlink: true,
+                headingStyleRange: '1-4',
+              }),
+              ...docElements,
+            ],
           },
         ],
       })
@@ -720,6 +874,8 @@ export function useExportDOCX() {
       console.error('Erreur lors de l\'export DOCX:', error)
       toast.error('Erreur lors de l\'export du document Word')
       throw error
+    } finally {
+      useEditorStore.getState().setExporting(false)
     }
   }, [lawyerProfile, toast])
 
