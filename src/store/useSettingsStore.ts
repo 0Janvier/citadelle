@@ -1,10 +1,18 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type Theme = 'light' | 'dark' | 'sepia' | 'auto'
+export type Theme = 'light' | 'dark' | 'sepia' | 'midnight' | 'auto'
 export type TypewriterHighlightStyle = 'line' | 'sentence' | 'paragraph'
 export type TypewriterScrollPosition = 'top' | 'middle' | 'bottom' | 'variable' | 'none'
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange' | 'purple'
+export type HeadingNumberingStyle = 'juridique' | 'numeric'
+
+export interface HeadingNumberingConfig {
+  enabled: boolean
+  style: HeadingNumberingStyle
+  startLevel: number // 1-6, H2 maps to level 1
+}
+
 
 // Highlight color values for light and dark modes
 export const HIGHLIGHT_COLORS: Record<HighlightColor, { light: string; dark: string; name: string }> = {
@@ -33,6 +41,7 @@ interface SettingsStore {
   autoSave: boolean
   autoSaveInterval: number
   spellcheckEnabled: boolean
+  frenchTypography: boolean
 
   // Typewriter mode
   typewriterMode: boolean
@@ -52,6 +61,15 @@ interface SettingsStore {
   // Editor letterhead
   afficherCartoucheEditeur: boolean
 
+  // Bubble toolbar
+  showBubbleToolbar: boolean
+
+  // Accent color (null = theme default)
+  accentColor: string | null
+
+  // Heading numbering
+  headingNumbering: HeadingNumberingConfig
+
   // Setters
   setFontSize: (size: number) => void
   setFontFamily: (family: string) => void
@@ -63,11 +81,17 @@ interface SettingsStore {
   setAutoSave: (enabled: boolean) => void
   setAutoSaveInterval: (interval: number) => void
   setSpellcheck: (enabled: boolean) => void
+  setFrenchTypography: (enabled: boolean) => void
   setRecentFilesCount: (count: number) => void
   setConfirmTabClose: (confirm: boolean) => void
   setRestoreSession: (restore: boolean) => void
   setHighlightColor: (color: HighlightColor) => void
   setAfficherCartoucheEditeur: (show: boolean) => void
+  setShowBubbleToolbar: (show: boolean) => void
+  setAccentColor: (color: string | null) => void
+
+  // Heading numbering setters
+  setHeadingNumbering: (config: Partial<HeadingNumberingConfig>) => void
 
   // Typewriter setters
   setTypewriterMode: (enabled: boolean) => void
@@ -94,7 +118,7 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       toggleTheme: () => {
         const currentTheme = get().theme
-        const themes: Theme[] = ['light', 'dark', 'sepia']
+        const themes: Theme[] = ['light', 'dark', 'sepia', 'midnight']
         const currentIndex = themes.indexOf(currentTheme as any)
         const nextTheme = themes[(currentIndex + 1) % themes.length]
         get().setTheme(nextTheme)
@@ -111,6 +135,7 @@ export const useSettingsStore = create<SettingsStore>()(
       autoSave: true,
       autoSaveInterval: 3000, // 3 seconds
       spellcheckEnabled: true,
+      frenchTypography: true,
 
       // Typewriter mode
       typewriterMode: false,
@@ -130,6 +155,19 @@ export const useSettingsStore = create<SettingsStore>()(
       // Editor letterhead
       afficherCartoucheEditeur: true,
 
+      // Bubble toolbar
+      showBubbleToolbar: true,
+
+      // Accent color
+      accentColor: null as string | null,
+
+      // Heading numbering
+      headingNumbering: {
+        enabled: true,
+        style: 'juridique' as HeadingNumberingStyle,
+        startLevel: 1,
+      },
+
       // Setters
       setFontSize: (size) => set({ fontSize: Math.max(10, Math.min(24, size)) }),
       setFontFamily: (family) => set({ fontFamily: family }),
@@ -145,12 +183,24 @@ export const useSettingsStore = create<SettingsStore>()(
       setAutoSaveInterval: (interval) =>
         set({ autoSaveInterval: Math.max(1000, interval) }),
       setSpellcheck: (enabled) => set({ spellcheckEnabled: enabled }),
+      setFrenchTypography: (enabled) => set({ frenchTypography: enabled }),
       setRecentFilesCount: (count) =>
         set({ recentFilesCount: Math.max(5, Math.min(50, count)) }),
       setConfirmTabClose: (confirm) => set({ confirmTabClose: confirm }),
       setRestoreSession: (restore) => set({ restoreSession: restore }),
       setHighlightColor: (color) => set({ highlightColor: color }),
       setAfficherCartoucheEditeur: (show) => set({ afficherCartoucheEditeur: show }),
+      setShowBubbleToolbar: (show) => set({ showBubbleToolbar: show }),
+      setAccentColor: (color) => {
+        set({ accentColor: color })
+        applyAccentColor(color)
+      },
+
+      // Heading numbering setters
+      setHeadingNumbering: (config) =>
+        set((state) => ({
+          headingNumbering: { ...state.headingNumbering, ...config },
+        })),
 
       // Typewriter setters
       setTypewriterMode: (enabled) => set({ typewriterMode: enabled }),
@@ -190,6 +240,7 @@ export const useSettingsStore = create<SettingsStore>()(
           autoSave: true,
           autoSaveInterval: 3000,
           spellcheckEnabled: true,
+          frenchTypography: true,
           typewriterMode: false,
           typewriterDimOpacity: 0.4,
           typewriterHighlightStyle: 'paragraph' as TypewriterHighlightStyle,
@@ -200,8 +251,16 @@ export const useSettingsStore = create<SettingsStore>()(
           restoreSession: true,
           highlightColor: 'yellow' as HighlightColor,
           afficherCartoucheEditeur: true,
+          showBubbleToolbar: true,
+          accentColor: null,
+          headingNumbering: {
+            enabled: true,
+            style: 'juridique' as HeadingNumberingStyle,
+            startLevel: 1,
+          },
         })
         applyTheme('auto')
+        applyAccentColor(null)
       },
     }),
     {
@@ -209,6 +268,19 @@ export const useSettingsStore = create<SettingsStore>()(
     }
   )
 )
+
+// Apply custom accent color override
+function applyAccentColor(color: string | null) {
+  const root = document.documentElement
+  if (color) {
+    root.style.setProperty('--accent', color)
+    // Derive a hover color (slightly lighter/different)
+    root.style.setProperty('--accent-hover', color)
+  } else {
+    root.style.removeProperty('--accent')
+    root.style.removeProperty('--accent-hover')
+  }
+}
 
 // Apply theme to document
 function applyTheme(theme: Theme) {
@@ -228,6 +300,9 @@ function applyTheme(theme: Theme) {
   } else if (theme === 'sepia') {
     root.classList.remove('dark')
     root.setAttribute('data-theme', 'sepia')
+  } else if (theme === 'midnight') {
+    root.classList.add('dark')
+    root.setAttribute('data-theme', 'midnight')
   }
 }
 
@@ -238,6 +313,7 @@ if (typeof window !== 'undefined') {
     try {
       const { state } = JSON.parse(storedSettings)
       applyTheme(state.theme || 'auto')
+      if (state.accentColor) applyAccentColor(state.accentColor)
     } catch (e) {
       applyTheme('auto')
     }

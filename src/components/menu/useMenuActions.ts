@@ -4,7 +4,6 @@ import { useEditorStore } from '../../store/useEditorStore'
 import { useSettingsStore, Theme, TypewriterHighlightStyle, TypewriterScrollPosition } from '../../store/useSettingsStore'
 import { usePageStore } from '../../store/usePageStore'
 import { useFolderStore } from '../../store/useFolderStore'
-import { usePiecesStore } from '../../store/usePiecesStore'
 import { useTocStore } from '../../store/useTocStore'
 import { usePanelStore } from '../../store/usePanelStore'
 import { useFileOperations } from '../../hooks/useFileOperations'
@@ -62,8 +61,6 @@ export function useMenuActions() {
   const toggleSidebar = useFolderStore((s) => s.toggleSidebar)
 
   // Panels
-  const togglePiecesPanel = usePiecesStore((s) => s.togglePanel)
-  const piecesPanelOpen = usePiecesStore((s) => s.panelOpen)
   const toggleTocPanel = useTocStore((s) => s.togglePanel)
   const tocPanelOpen = useTocStore((s) => s.panelOpen)
   const activePanel = usePanelStore((s) => s.activePanel)
@@ -201,7 +198,7 @@ export function useMenuActions() {
     showTabBar,
     sidebarVisible,
     activePanel,
-    piecesPanelOpen,
+    piecesPanelOpen: activePanel === 'pieces',
     tocPanelOpen,
 
     // File actions
@@ -257,7 +254,7 @@ export function useMenuActions() {
     insertPageBreak,
 
     // Document panels
-    togglePiecesPanel,
+    togglePiecesPanel: () => togglePanel('pieces'),
     toggleTocPanel,
     toggleClausesPanel: () => togglePanel('clauses'),
     toggleVariablesPanel: () => togglePanel('variables'),

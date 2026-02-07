@@ -4,25 +4,13 @@ import { useEditorStore } from '../store/useEditorStore'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useRecentFilesStore } from '../store/useRecentFilesStore'
-import { usePiecesStore } from '../store/usePiecesStore'
-import { useTocStore } from '../store/useTocStore'
-import { usePanelStore } from '../store/usePanelStore'
-import { useVersionStore } from '../store/useVersionStore'
 import { useFileOperations } from '../hooks/useFileOperations'
 import { useExportPDFNative } from '../hooks/useExportPDFNative'
 import { useToast } from '../hooks/useToast'
-import { useTemplateStore } from '../store/useTemplateStore'
 import { invoke } from '@tauri-apps/api/tauri'
+import { buildCommands } from '../lib/commands'
 import { searchAllCodes, formatArticleForInsertion, CODE_LABELS } from '../data/codes/index'
 import './CommandPalette.css'
-
-interface CommandItem {
-  id: string
-  label: string
-  shortcut?: string
-  category: string
-  action: () => void
-}
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
@@ -69,198 +57,13 @@ export function CommandPalette() {
     }
   }
 
-  // Command palette commands
-  const commands: CommandItem[] = [
-    {
-      id: 'new-file',
-      label: 'Nouveau fichier',
-      shortcut: 'Cmd+N',
-      category: 'Fichier',
-      action: () => addDocument(),
-    },
-    {
-      id: 'open-file',
-      label: 'Ouvrir fichier',
-      shortcut: 'Cmd+O',
-      category: 'Fichier',
-      action: openFile,
-    },
-    {
-      id: 'save-file',
-      label: 'Sauvegarder',
-      shortcut: 'Cmd+S',
-      category: 'Fichier',
-      action: () => activeDocumentId && saveFile(activeDocumentId),
-    },
-    {
-      id: 'save-file-as',
-      label: 'Sauvegarder sous',
-      shortcut: 'Cmd+Shift+S',
-      category: 'Fichier',
-      action: () => activeDocumentId && saveFileAs(activeDocumentId),
-    },
-    {
-      id: 'find',
-      label: 'Rechercher',
-      shortcut: 'Cmd+F',
-      category: 'Édition',
-      action: () => setFindDialogOpen(true),
-    },
-    {
-      id: 'find-replace',
-      label: 'Rechercher et remplacer',
-      shortcut: 'Cmd+H',
-      category: 'Édition',
-      action: () => {
-        setFindDialogOpen(true)
-        // Also show replace panel
-        useEditorStore.getState().setShowReplace(true)
-      },
-    },
-    {
-      id: 'toggle-pieces-panel',
-      label: 'Pieces justificatives',
-      shortcut: 'Cmd+Shift+P',
-      category: 'Édition',
-      action: () => usePiecesStore.getState().togglePanel(),
-    },
-    {
-      id: 'toggle-toc-panel',
-      label: 'Table des matieres',
-      shortcut: 'Cmd+Shift+M',
-      category: 'Édition',
-      action: () => useTocStore.getState().togglePanel(),
-    },
-    {
-      id: 'toggle-distraction-free',
-      label: 'Mode sans distraction',
-      shortcut: 'Cmd+Shift+D',
-      category: 'Vue',
-      action: toggleDistractionFree,
-    },
-    {
-      id: 'toggle-theme',
-      label: 'Basculer le thème',
-      shortcut: 'Cmd+T',
-      category: 'Vue',
-      action: toggleTheme,
-    },
-    {
-      id: 'theme-light',
-      label: 'Thème clair',
-      category: 'Vue',
-      action: () => setTheme('light'),
-    },
-    {
-      id: 'theme-dark',
-      label: 'Thème sombre',
-      category: 'Vue',
-      action: () => setTheme('dark'),
-    },
-    {
-      id: 'theme-sepia',
-      label: 'Thème sepia',
-      category: 'Vue',
-      action: () => setTheme('sepia'),
-    },
-    {
-      id: 'theme-auto',
-      label: 'Thème automatique',
-      category: 'Vue',
-      action: () => setTheme('auto'),
-    },
-    {
-      id: 'zoom-in',
-      label: 'Agrandir',
-      shortcut: 'Cmd++',
-      category: 'Vue',
-      action: increaseZoom,
-    },
-    {
-      id: 'zoom-out',
-      label: 'Réduire',
-      shortcut: 'Cmd+-',
-      category: 'Vue',
-      action: decreaseZoom,
-    },
-    {
-      id: 'zoom-reset',
-      label: 'Réinitialiser le zoom',
-      shortcut: 'Cmd+0',
-      category: 'Vue',
-      action: resetZoom,
-    },
-    {
-      id: 'export-pdf',
-      label: 'Exporter en PDF',
-      shortcut: 'Cmd+E',
-      category: 'Export',
-      action: () => activeDocumentId && exportToPDF(activeDocumentId),
-    },
-    {
-      id: 'pdf-export-settings',
-      label: "Paramètres d'export PDF",
-      category: 'Export',
-      action: () => setPdfExportSettingsOpen(true),
-    },
-    {
-      id: 'open-settings',
-      label: 'Ouvrir les paramètres',
-      shortcut: 'Cmd+,',
-      category: 'Application',
-      action: () => setSettingsOpen(true),
-    },
-    {
-      id: 'keyboard-shortcuts',
-      label: 'Raccourcis clavier',
-      shortcut: 'Cmd+/',
-      category: 'Application',
-      action: () => setShortcutsDialogOpen(true),
-    },
-    {
-      id: 'versions-panel',
-      label: 'Historique des versions',
-      shortcut: 'Cmd+Shift+H',
-      category: 'Panneaux',
-      action: () => usePanelStore.getState().togglePanel('versions'),
-    },
-    {
-      id: 'save-as-template',
-      label: 'Sauvegarder comme modèle',
-      category: 'Document',
-      action: () => {
-        const doc = useDocumentStore.getState().getActiveDocument()
-        if (doc) {
-          const name = window.prompt('Nom du modèle :', doc.title)
-          if (name) {
-            useTemplateStore.getState().createTemplate({
-              name,
-              description: `Modèle créé depuis "${doc.title}"`,
-              category: 'custom',
-              content: doc.content,
-              metadata: { defaultStyles: [], tags: ['custom'] },
-            }).then(() => {
-              toast.success(`Modèle "${name}" créé`)
-            }).catch((err: Error) => {
-              toast.error(`Erreur : ${err.message}`)
-            })
-          }
-        }
-      },
-    },
-    {
-      id: 'create-snapshot',
-      label: 'Créer un snapshot',
-      category: 'Document',
-      action: () => {
-        const doc = useDocumentStore.getState().getActiveDocument()
-        if (doc) {
-          useVersionStore.getState().createVersion(doc.id, `Snapshot ${new Date().toLocaleString('fr-FR')}`, doc.content, false)
-          toast.success('Snapshot créé')
-        }
-      },
-    },
-  ]
+  // Build commands from extracted definitions
+  const commands = buildCommands({
+    addDocument, activeDocumentId, openFile, saveFile, saveFileAs,
+    exportToPDF, toggleDistractionFree, setFindDialogOpen,
+    toggleTheme, setTheme, increaseZoom, decreaseZoom, resetZoom,
+    setPdfExportSettingsOpen, setSettingsOpen, setShortcutsDialogOpen, toast,
+  })
 
   // Search articles in legal codes when query looks like an article reference
   const codeResults = useMemo(() => {

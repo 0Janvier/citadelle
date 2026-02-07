@@ -4,12 +4,11 @@ import { useDocumentStore } from '../store/useDocumentStore'
 import { useEditorStore } from '../store/useEditorStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useFolderStore } from '../store/useFolderStore'
-import { usePiecesStore } from '../store/usePiecesStore'
 import { useTocStore } from '../store/useTocStore'
 import { usePageStore } from '../store/usePageStore'
 import { usePanelStore } from '../store/usePanelStore'
-import { useCommentStore } from '../store/useCommentStore'
 import { useProjectStore } from '../store/useProjectStore'
+import { useClosedTabsStore } from '../store/useClosedTabsStore'
 import { useFileOperations } from './useFileOperations'
 import { usePrint } from './usePrint'
 import { open } from '@tauri-apps/api/dialog'
@@ -42,7 +41,6 @@ export function useKeyboardShortcuts() {
   const toggleTheme = useSettingsStore((state) => state.toggleTheme)
   const toggleTypewriterMode = useSettingsStore((state) => state.toggleTypewriterMode)
   const toggleSidebar = useFolderStore((state) => state.toggleSidebar)
-  const togglePiecesPanel = usePiecesStore((state) => state.togglePanel)
   const toggleTocPanel = useTocStore((state) => state.togglePanel)
   const toggleViewMode = usePageStore((state) => state.toggleViewMode)
 
@@ -95,7 +93,6 @@ export function useKeyboardShortcuts() {
     toggleTypewriterMode,
     toggleViewMode,
     toggleSidebar,
-    togglePiecesPanel,
     toggleTocPanel,
     togglePanel,
     openPanel,
@@ -296,14 +293,14 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Shift + J: Toggle pieces panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'J') {
         e.preventDefault()
-        cb.togglePiecesPanel()
+        usePanelStore.getState().togglePanel('pieces')
         return
       }
 
-      // Cmd/Ctrl + Shift + M: Toggle TOC panel
+      // Cmd/Ctrl + Shift + M: Toggle Comments panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'M') {
         e.preventDefault()
-        cb.toggleTocPanel()
+        usePanelStore.getState().togglePanel('comments')
         return
       }
 
@@ -321,6 +318,13 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      // Cmd/Ctrl + Shift + E: Toggle Deadlines panel
+      if (cmdOrCtrl && e.shiftKey && e.key === 'E') {
+        e.preventDefault()
+        usePanelStore.getState().togglePanel('deadlines')
+        return
+      }
+
       // Cmd/Ctrl + Shift + K: Toggle Codes panel
       if (cmdOrCtrl && e.shiftKey && e.key === 'K') {
         e.preventDefault()
@@ -335,6 +339,28 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      // Cmd/Ctrl + Shift + B: Toggle Bookmarks panel
+      if (cmdOrCtrl && e.shiftKey && e.key === 'B') {
+        e.preventDefault()
+        usePanelStore.getState().togglePanel('bookmarks')
+        return
+      }
+
+      // Cmd/Ctrl + Shift + R: Reopen last closed tab
+      if (cmdOrCtrl && e.shiftKey && e.key === 'R') {
+        e.preventDefault()
+        const tab = useClosedTabsStore.getState().popClosedTab()
+        if (tab) {
+          cb.addDocument({
+            title: tab.title,
+            content: tab.content,
+            filePath: tab.filePath,
+            isDirty: true,
+          })
+        }
+        return
+      }
+
       // Cmd/Ctrl + Shift + .: Reopen last panel
       if (cmdOrCtrl && e.shiftKey && e.key === '>') {
         e.preventDefault()
@@ -342,10 +368,10 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Cmd/Ctrl + Alt + C: Toggle comment panel
+      // Cmd/Ctrl + Alt + C: Toggle comment panel (legacy, uses new panel store)
       if (cmdOrCtrl && e.altKey && e.key === 'c') {
         e.preventDefault()
-        useCommentStore.getState().togglePanel()
+        usePanelStore.getState().togglePanel('comments')
         return
       }
 

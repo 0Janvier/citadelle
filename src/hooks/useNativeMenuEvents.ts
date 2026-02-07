@@ -6,7 +6,6 @@ import { useEditorStore } from '../store/useEditorStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { usePageStore } from '../store/usePageStore'
 import { useFolderStore } from '../store/useFolderStore'
-import { usePiecesStore } from '../store/usePiecesStore'
 import { useTocStore } from '../store/useTocStore'
 import { usePanelStore } from '../store/usePanelStore'
 import { useFileOperations } from './useFileOperations'
@@ -58,7 +57,6 @@ export function useNativeMenuEvents() {
   // Other stores
   const toggleSidebar = useFolderStore((s) => s.toggleSidebar)
   const toggleViewMode = usePageStore((s) => s.toggleViewMode)
-  const togglePiecesPanel = usePiecesStore((s) => s.togglePanel)
   const toggleTocPanel = useTocStore((s) => s.togglePanel)
   const togglePanel = usePanelStore((s) => s.togglePanel)
 
@@ -140,6 +138,9 @@ export function useNativeMenuEvents() {
           break
         case 'theme_sepia':
           setTheme('sepia')
+          break
+        case 'theme_midnight':
+          setTheme('midnight')
           break
         case 'theme_auto':
           setTheme('auto')
@@ -267,7 +268,7 @@ export function useNativeMenuEvents() {
 
         // ===== Document menu =====
         case 'doc_pieces':
-          togglePiecesPanel()
+          togglePanel('pieces')
           break
         case 'doc_toc':
           toggleTocPanel()
@@ -335,7 +336,6 @@ export function useNativeMenuEvents() {
     increaseZoom,
     decreaseZoom,
     resetZoom,
-    togglePiecesPanel,
     toggleTocPanel,
     togglePanel,
   ])

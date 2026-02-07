@@ -99,6 +99,7 @@ pub fn create_app_menu() -> Menu {
     let theme_light = CustomMenuItem::new("theme_light", "Clair");
     let theme_dark = CustomMenuItem::new("theme_dark", "Sombre");
     let theme_sepia = CustomMenuItem::new("theme_sepia", "Sépia");
+    let theme_midnight = CustomMenuItem::new("theme_midnight", "Bleu nuit");
     let theme_auto = CustomMenuItem::new("theme_auto", "Automatique");
 
     let theme_submenu = Submenu::new(
@@ -107,6 +108,7 @@ pub fn create_app_menu() -> Menu {
             .add_item(theme_light)
             .add_item(theme_dark)
             .add_item(theme_sepia)
+            .add_item(theme_midnight)
             .add_item(theme_auto),
     );
 

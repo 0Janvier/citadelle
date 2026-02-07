@@ -76,7 +76,7 @@ export function SettingsAdvanced() {
         >
           Réinitialiser tous les paramètres
         </button>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-[var(--text-secondary)] mt-2">
           Cette action restaurera tous les paramètres par défaut.
         </p>
       </div>

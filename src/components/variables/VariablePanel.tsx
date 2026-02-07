@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useVariableStore } from '../../store/useVariableStore'
+import { useEditorStore } from '../../store/useEditorStore'
 import { useLawyerProfileStore } from '../../store/useLawyerProfileStore'
 import { VARIABLE_CATEGORY_LABELS, type VariableCategory } from '../../types/editor-features'
 
@@ -48,7 +49,17 @@ export function VariablePanel({ documentId, onClose }: VariablePanelProps) {
   }
 
   const handleInsertVariable = (key: string) => {
-    // Copier la variable dans le presse-papier
+    // Inserer directement dans l'editeur actif
+    const editor = useEditorStore.getState().activeEditor
+    if (editor) {
+      editor.chain().focus().insertContent(`{{${key}}}`).run()
+    } else {
+      // Fallback: copier dans le presse-papier
+      navigator.clipboard.writeText(`{{${key}}}`)
+    }
+  }
+
+  const handleCopyVariable = (key: string) => {
     navigator.clipboard.writeText(`{{${key}}}`)
   }
 
@@ -198,6 +209,15 @@ export function VariablePanel({ documentId, onClose }: VariablePanelProps) {
                       <div className="flex items-center gap-1 ml-2">
                         <button
                           onClick={() => handleInsertVariable(def.key)}
+                          className="p-1.5 rounded hover:bg-[var(--bg-primary)] transition-colors"
+                          title="Inserer dans le document"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m0 0l-4-4m4 4l4-4" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleCopyVariable(def.key)}
                           className="p-1.5 rounded hover:bg-[var(--bg-primary)] transition-colors"
                           title="Copier la variable"
                         >

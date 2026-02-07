@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/tauri'
 import { JSONContent } from '@tiptap/core'
 import { documentStorage } from '../lib/documentStorage'
 import { markdownToJson } from '../lib/markdownParser'
+import { useClosedTabsStore } from './useClosedTabsStore'
 
 export type DocumentType = 'conclusions' | 'assignation' | 'requete' | 'contrat' | 'courrier' | 'autre'
 
@@ -70,6 +71,9 @@ interface DocumentStore {
   // Get document by ID
   getDocument: (id: string) => Document | undefined
 
+  // Duplicate document
+  duplicateDocument: (id: string) => string | null
+
   // Reorder documents (drag & drop tabs)
   reorderDocuments: (fromIndex: number, toIndex: number) => void
 
@@ -122,6 +126,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   removeDocument: (id) => {
+    // Save to closed tabs before removing
+    const doc = get().documents.find((d) => d.id === id)
+    if (doc) {
+      useClosedTabsStore.getState().pushClosedTab({
+        title: doc.title,
+        content: doc.content,
+        filePath: doc.filePath,
+        closedAt: Date.now(),
+      })
+    }
+
     set((state) => {
       const newDocs = state.documents.filter((doc) => doc.id !== id)
       let newActiveId = state.activeDocumentId
@@ -155,6 +170,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   setActiveDocument: (id) => {
     set({ activeDocumentId: id })
+  },
+
+  duplicateDocument: (id) => {
+    const { documents, addDocument: add } = get()
+    const doc = documents.find((d) => d.id === id)
+    if (!doc) return null
+
+    // Deep clone content to avoid shared references
+    const clonedContent = JSON.parse(JSON.stringify(doc.content))
+    return add({
+      title: `${doc.title} (copie)`,
+      content: clonedContent,
+      isDirty: true,
+      metadata: doc.metadata ? { ...doc.metadata } : undefined,
+    })
   },
 
   updateContent: (id, content) => {

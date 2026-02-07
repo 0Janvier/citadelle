@@ -30,7 +30,7 @@ export function SettingsCabinet() {
         <h4 className="text-sm font-medium mb-3">Identité</h4>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Civilité</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Civilité</label>
             <select
               value={profile.civilite}
               onChange={(e) => profile.setField('civilite', e.target.value as 'Maitre' | 'Me' | '')}
@@ -42,7 +42,7 @@ export function SettingsCabinet() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Prénom</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Prénom</label>
             <input
               type="text"
               value={profile.prenom}
@@ -52,7 +52,7 @@ export function SettingsCabinet() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nom</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Nom</label>
             <input
               type="text"
               value={profile.nom}
@@ -69,7 +69,7 @@ export function SettingsCabinet() {
         <h4 className="text-sm font-medium mb-3">Cabinet</h4>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Nom du cabinet</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Nom du cabinet</label>
             <input
               type="text"
               value={profile.cabinet}
@@ -80,7 +80,7 @@ export function SettingsCabinet() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Barreau</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">Barreau</label>
               <input
                 type="text"
                 value={profile.barreau}
@@ -90,7 +90,7 @@ export function SettingsCabinet() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">N° Toque</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">N° Toque</label>
               <input
                 type="text"
                 value={profile.numeroToque}
@@ -108,7 +108,7 @@ export function SettingsCabinet() {
         <h4 className="text-sm font-medium mb-3">Coordonnées</h4>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Adresse</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Adresse</label>
             <input
               type="text"
               value={profile.adresse}
@@ -119,7 +119,7 @@ export function SettingsCabinet() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Code postal</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">Code postal</label>
               <input
                 type="text"
                 value={profile.codePostal}
@@ -129,7 +129,7 @@ export function SettingsCabinet() {
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Ville</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">Ville</label>
               <input
                 type="text"
                 value={profile.ville}
@@ -141,7 +141,7 @@ export function SettingsCabinet() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Téléphone</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">Téléphone</label>
               <input
                 type="tel"
                 value={profile.telephone}
@@ -151,7 +151,7 @@ export function SettingsCabinet() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Email</label>
+              <label className="block text-xs text-[var(--text-secondary)] mb-1">Email</label>
               <input
                 type="email"
                 value={profile.email}
@@ -170,7 +170,7 @@ export function SettingsCabinet() {
         <div className="grid grid-cols-2 gap-4">
           {/* Logo */}
           <div>
-            <label className="block text-xs text-gray-500 mb-2">Logo du cabinet</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-2">Logo du cabinet</label>
             <div className="border border-dashed border-[var(--border)] rounded-lg p-4 text-center">
               {profile.logo ? (
                 <div className="relative">
@@ -189,7 +189,7 @@ export function SettingsCabinet() {
               ) : (
                 <button
                   onClick={() => logoInputRef.current?.click()}
-                  className="text-sm text-gray-500 hover:text-[var(--accent)]"
+                  className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
                 >
                   + Ajouter un logo
                 </button>
@@ -206,7 +206,7 @@ export function SettingsCabinet() {
 
           {/* Signature */}
           <div>
-            <label className="block text-xs text-gray-500 mb-2">Signature</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-2">Signature</label>
             <div className="border border-dashed border-[var(--border)] rounded-lg p-4 text-center">
               {profile.signature ? (
                 <div className="relative">
@@ -225,7 +225,7 @@ export function SettingsCabinet() {
               ) : (
                 <button
                   onClick={() => signatureInputRef.current?.click()}
-                  className="text-sm text-gray-500 hover:text-[var(--accent)]"
+                  className="text-sm text-[var(--text-secondary)] hover:text-[var(--accent)]"
                 >
                   + Ajouter signature
                 </button>
@@ -295,7 +295,7 @@ export function SettingsCabinet() {
             </label>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Format pagination</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Format pagination</label>
             <select
               value={profile.paginationFormat}
               onChange={(e) => profile.setField('paginationFormat', e.target.value as any)}
@@ -308,7 +308,7 @@ export function SettingsCabinet() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Mentions légales</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Mentions légales</label>
             <textarea
               value={profile.mentionsLegales}
               onChange={(e) => profile.setField('mentionsLegales', e.target.value)}
@@ -323,7 +323,7 @@ export function SettingsCabinet() {
       {(profile.nom || profile.cabinet) && (
         <div className="border-t border-[var(--border)] pt-4">
           <h4 className="text-sm font-medium mb-3">Aperçu de l'en-tête</h4>
-          <div className="border border-[var(--border)] rounded-lg p-4 bg-white dark:bg-gray-800">
+          <div className="border border-[var(--border)] rounded-lg p-4 bg-[var(--editor-bg)]">
             <div className="flex items-start gap-4">
               {profile.logo && profile.afficherLogoEntete && (
                 <img src={profile.logo} alt="Logo" className="h-12 object-contain" />
@@ -332,14 +332,14 @@ export function SettingsCabinet() {
                 {profile.cabinet && <div className="font-bold">{profile.cabinet}</div>}
                 {profile.getFullName() && <div>{profile.getFullName()}</div>}
                 {(profile.barreau || profile.numeroToque) && (
-                  <div className="text-gray-500 text-xs">
+                  <div className="text-[var(--text-secondary)] text-xs">
                     {profile.barreau && `Barreau de ${profile.barreau}`}
                     {profile.barreau && profile.numeroToque && ' - '}
                     {profile.numeroToque && `Toque ${profile.numeroToque}`}
                   </div>
                 )}
               </div>
-              <div className="text-right text-xs text-gray-500">
+              <div className="text-right text-xs text-[var(--text-secondary)]">
                 {profile.adresse && <div>{profile.adresse}</div>}
                 {(profile.codePostal || profile.ville) && (
                   <div>{profile.codePostal} {profile.ville}</div>

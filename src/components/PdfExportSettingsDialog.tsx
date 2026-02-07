@@ -32,6 +32,25 @@ const tabs: { id: TabId; label: string; icon: typeof FileText }[] = [
   { id: 'headers', label: 'En-têtes', icon: Heading },
 ]
 
+/** Themed toggle switch */
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
+        ${checked ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`}
+    >
+      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform
+        ${checked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+    </button>
+  )
+}
+
 export function PdfExportSettingsDialog({
   isOpen,
   onClose,
@@ -154,12 +173,7 @@ function NumberingTab() {
             Ajoute des numéros devant les titres
           </p>
         </div>
-        <input
-          type="checkbox"
-          checked={headingNumbering.enabled}
-          onChange={(e) => setNumberingEnabled(e.target.checked)}
-          className="w-5 h-5 accent-[var(--accent)]"
-        />
+        <Toggle checked={headingNumbering.enabled} onChange={setNumberingEnabled} />
       </div>
 
       {/* Table des matières */}
@@ -172,12 +186,7 @@ function NumberingTab() {
             Ajoute une TdM en première page
           </p>
         </div>
-        <input
-          type="checkbox"
-          checked={includeTOC}
-          onChange={(e) => setIncludeTOC(e.target.checked)}
-          className="w-5 h-5 accent-[var(--accent)]"
-        />
+        <Toggle checked={includeTOC} onChange={setIncludeTOC} />
       </div>
 
       {headingNumbering.enabled && (
@@ -500,13 +509,7 @@ function HeadersTab() {
               Logo du cabinet
             </label>
           </div>
-          <input
-            type="checkbox"
-            checked={headerFooter.includeLogo}
-            onChange={(e) => setIncludeLogo(e.target.checked)}
-            disabled={!hasLogo}
-            className="w-5 h-5 accent-[var(--accent)] disabled:opacity-50"
-          />
+          <Toggle checked={headerFooter.includeLogo} onChange={setIncludeLogo} disabled={!hasLogo} />
         </div>
 
         {!hasLogo && (
@@ -519,7 +522,7 @@ function HeadersTab() {
           <>
             {/* Aperçu du logo */}
             <div className="flex items-center gap-4">
-              <div className="p-2 bg-white dark:bg-gray-800 rounded border border-[var(--border)]">
+              <div className="p-2 bg-[var(--editor-bg)] rounded border border-[var(--border)]">
                 <img
                   src={profile.logo!}
                   alt="Logo cabinet"
@@ -601,12 +604,7 @@ function HeadersTab() {
           <label className="text-sm font-medium text-[var(--text)]">
             En-tête
           </label>
-          <input
-            type="checkbox"
-            checked={headerFooter.headerEnabled}
-            onChange={(e) => setHeaderEnabled(e.target.checked)}
-            className="w-5 h-5 accent-[var(--accent)]"
-          />
+          <Toggle checked={headerFooter.headerEnabled} onChange={setHeaderEnabled} />
         </div>
         {headerFooter.headerEnabled && (
           <div className="grid grid-cols-3 gap-3">
@@ -656,12 +654,7 @@ function HeadersTab() {
           <label className="text-sm font-medium text-[var(--text)]">
             Pied de page
           </label>
-          <input
-            type="checkbox"
-            checked={headerFooter.footerEnabled}
-            onChange={(e) => setFooterEnabled(e.target.checked)}
-            className="w-5 h-5 accent-[var(--accent)]"
-          />
+          <Toggle checked={headerFooter.footerEnabled} onChange={setFooterEnabled} />
         </div>
         {headerFooter.footerEnabled && (
           <div className="grid grid-cols-3 gap-3">
@@ -715,12 +708,7 @@ function HeadersTab() {
             Masquer l'en-tête/pied sur la première page
           </p>
         </div>
-        <input
-          type="checkbox"
-          checked={headerFooter.firstPageDifferent}
-          onChange={(e) => setFirstPageDifferent(e.target.checked)}
-          className="w-5 h-5 accent-[var(--accent)]"
-        />
+        <Toggle checked={headerFooter.firstPageDifferent} onChange={setFirstPageDifferent} />
       </div>
     </div>
   )

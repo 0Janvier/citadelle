@@ -22,20 +22,26 @@ export type PanelType =
   | 'goldocab'
   | 'deadlines'
   | 'versions'
+  | 'document-map'
+  | 'characters'
+  | 'bookmarks'
   | null
 
 interface PanelState {
   activePanel: PanelType
   lastPanel: PanelType
+  isPinned: boolean
   openPanel: (panel: PanelType) => void
   closePanel: () => void
   togglePanel: (panel: PanelType) => void
   reopenLastPanel: () => void
+  setIsPinned: (pinned: boolean) => void
 }
 
 export const usePanelStore = create<PanelState>((set, get) => ({
   activePanel: null,
   lastPanel: null,
+  isPinned: localStorage.getItem('citadelle-sidebar-pinned') === 'true',
 
   openPanel: (panel) => set({ activePanel: panel }),
 
@@ -58,5 +64,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     if (lastPanel) {
       set({ activePanel: lastPanel })
     }
+  },
+
+  setIsPinned: (pinned) => {
+    localStorage.setItem('citadelle-sidebar-pinned', pinned.toString())
+    set({ isPinned: pinned })
   },
 }))

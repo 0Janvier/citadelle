@@ -119,6 +119,7 @@ export function Dialog({
           {type !== 'alert' && (
             <button
               onClick={onClose}
+              autoFocus={destructive}
               className="
                 px-4 min-h-button-lg
                 rounded-hig-md
@@ -145,7 +146,7 @@ export function Dialog({
                 : 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white'
               }
             `}
-            autoFocus
+            autoFocus={!destructive}
           >
             {confirmText}
           </button>

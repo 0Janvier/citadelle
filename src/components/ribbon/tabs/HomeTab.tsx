@@ -1,6 +1,6 @@
 /**
  * Onglet Accueil du Ribbon
- * Contient : Presse-papiers, Police, Paragraphe, Styles
+ * Contient : Police, Paragraphe, Styles
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
@@ -23,10 +23,6 @@ import {
   ListChecks,
   Indent,
   Outdent,
-  Clipboard,
-  Copy,
-  Scissors,
-  Paintbrush,
 } from 'lucide-react'
 import { RibbonButton } from '../RibbonButton'
 import { RibbonGroup, RibbonSeparator, RibbonDivider } from '../RibbonGroup'
@@ -76,24 +72,6 @@ export function HomeTab({ editor }: HomeTabProps) {
 
   if (!editor) return null
 
-  // Presse-papiers
-  const handleCut = () => {
-    document.execCommand('cut')
-  }
-
-  const handleCopy = () => {
-    document.execCommand('copy')
-  }
-
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText()
-      editor.chain().focus().insertContent(text).run()
-    } catch {
-      document.execCommand('paste')
-    }
-  }
-
   // Police - obtenir les styles de la sélection actuelle
   const currentTextStyle = useMemo(() => {
     if (!editor) return { fontFamily: '', fontSize: '' }
@@ -139,27 +117,6 @@ export function HomeTab({ editor }: HomeTabProps) {
 
   return (
     <RibbonTab>
-      {/* Presse-papiers */}
-      <RibbonGroup label="Presse-papiers">
-        <RibbonButton variant="large" onClick={handlePaste} tooltip="Coller (Cmd+V)">
-          <Clipboard size={20} />
-          <span>Coller</span>
-        </RibbonButton>
-        <div className="flex flex-col gap-0.5">
-          <RibbonButton variant="icon" onClick={handleCut} tooltip="Couper (Cmd+X)">
-            <Scissors size={16} />
-          </RibbonButton>
-          <RibbonButton variant="icon" onClick={handleCopy} tooltip="Copier (Cmd+C)">
-            <Copy size={16} />
-          </RibbonButton>
-          <RibbonButton variant="icon" tooltip="Reproduire la mise en forme">
-            <Paintbrush size={16} />
-          </RibbonButton>
-        </div>
-      </RibbonGroup>
-
-      <RibbonDivider />
-
       {/* Police */}
       <RibbonGroup label="Police">
         <div className="flex flex-col gap-1">
@@ -217,19 +174,22 @@ export function HomeTab({ editor }: HomeTabProps) {
                 <Highlighter size={16} />
               </RibbonButton>
               {showHighlightColors && (
-                <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg)] border border-[var(--border)]
-                  rounded-lg shadow-lg z-dropdown grid grid-cols-4 gap-1 animate-scaleIn">
-                  {(Object.keys(HIGHLIGHT_COLORS) as HighlightColor[]).map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => handleHighlight(color)}
-                      className="w-6 h-6 rounded border border-[var(--border)] hover:scale-110 transition-transform"
-                      style={{ backgroundColor: HIGHLIGHT_COLORS[color].light }}
-                      title={HIGHLIGHT_COLORS[color].name}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowHighlightColors(false)} />
+                  <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg)] border border-[var(--border)]
+                    rounded-lg shadow-lg z-dropdown grid grid-cols-4 gap-1 animate-scaleIn">
+                    {(Object.keys(HIGHLIGHT_COLORS) as HighlightColor[]).map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => handleHighlight(color)}
+                        className="w-6 h-6 rounded border border-[var(--border)] hover:scale-110 transition-transform"
+                        style={{ backgroundColor: HIGHLIGHT_COLORS[color].light }}
+                        title={HIGHLIGHT_COLORS[color].name}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
             <div className="relative">
@@ -241,26 +201,29 @@ export function HomeTab({ editor }: HomeTabProps) {
                 <Palette size={16} />
               </RibbonButton>
               {showTextColors && (
-                <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg)] border border-[var(--border)]
-                  rounded-lg shadow-lg z-dropdown grid grid-cols-4 gap-1 animate-scaleIn">
-                  {TEXT_COLORS.map((color) => (
-                    <button
-                      key={color.name}
-                      type="button"
-                      onClick={() => {
-                        if (color.value) {
-                          editor.chain().focus().setColor(color.value).run()
-                        } else {
-                          editor.chain().focus().unsetColor().run()
-                        }
-                        setShowTextColors(false)
-                      }}
-                      className="w-6 h-6 rounded border border-[var(--border)] hover:scale-110 transition-transform"
-                      style={{ backgroundColor: color.value || 'var(--text)' }}
-                      title={color.name}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowTextColors(false)} />
+                  <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg)] border border-[var(--border)]
+                    rounded-lg shadow-lg z-dropdown grid grid-cols-4 gap-1 animate-scaleIn">
+                    {TEXT_COLORS.map((color) => (
+                      <button
+                        key={color.name}
+                        type="button"
+                        onClick={() => {
+                          if (color.value) {
+                            editor.chain().focus().setColor(color.value).run()
+                          } else {
+                            editor.chain().focus().unsetColor().run()
+                          }
+                          setShowTextColors(false)
+                        }}
+                        className="w-6 h-6 rounded border border-[var(--border)] hover:scale-110 transition-transform"
+                        style={{ backgroundColor: color.value || 'var(--text)' }}
+                        title={color.name}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
             <RibbonSeparator />
@@ -359,7 +322,6 @@ export function HomeTab({ editor }: HomeTabProps) {
             <RibbonButton
               variant="icon"
               onClick={() => {
-                // Diminuer l'indentation - utiliser liftListItem si dans une liste
                 if (editor.isActive('listItem')) {
                   editor.chain().focus().liftListItem('listItem').run()
                 }
@@ -371,7 +333,6 @@ export function HomeTab({ editor }: HomeTabProps) {
             <RibbonButton
               variant="icon"
               onClick={() => {
-                // Augmenter l'indentation - utiliser sinkListItem si dans une liste
                 if (editor.isActive('listItem')) {
                   editor.chain().focus().sinkListItem('listItem').run()
                 }
@@ -386,7 +347,7 @@ export function HomeTab({ editor }: HomeTabProps) {
 
       <RibbonDivider />
 
-      {/* Styles */}
+      {/* Styles avec aperçu typographique */}
       <RibbonGroup label="Styles">
         <div className="flex items-center gap-1">
           <RibbonButton
@@ -394,6 +355,7 @@ export function HomeTab({ editor }: HomeTabProps) {
             isActive={editor.isActive('heading', { level: 1 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             tooltip="Titre 1 (Cmd+1)"
+            className="!text-base !font-bold"
           >
             H1
           </RibbonButton>
@@ -402,6 +364,7 @@ export function HomeTab({ editor }: HomeTabProps) {
             isActive={editor.isActive('heading', { level: 2 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             tooltip="Titre 2 (Cmd+2)"
+            className="!text-sm !font-bold"
           >
             H2
           </RibbonButton>
@@ -410,6 +373,7 @@ export function HomeTab({ editor }: HomeTabProps) {
             isActive={editor.isActive('heading', { level: 3 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             tooltip="Titre 3 (Cmd+3)"
+            className="!text-xs !font-semibold"
           >
             H3
           </RibbonButton>
@@ -418,6 +382,7 @@ export function HomeTab({ editor }: HomeTabProps) {
             isActive={editor.isActive('paragraph')}
             onClick={() => editor.chain().focus().setParagraph().run()}
             tooltip="Paragraphe"
+            className="!text-xs"
           >
             P
           </RibbonButton>

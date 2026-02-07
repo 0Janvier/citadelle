@@ -79,6 +79,11 @@ interface EditorStore {
   // Keyboard shortcuts dialog
   shortcutsDialogOpen: boolean
   setShortcutsDialogOpen: (open: boolean) => void
+
+  // Page info (from pagination)
+  currentPage: number
+  totalPages: number
+  setPageInfo: (current: number, total: number) => void
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -176,4 +181,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
   // Keyboard shortcuts dialog
   shortcutsDialogOpen: false,
   setShortcutsDialogOpen: (open) => set({ shortcutsDialogOpen: open }),
+
+  // Page info
+  currentPage: 0,
+  totalPages: 0,
+  setPageInfo: (current, total) => set({ currentPage: current, totalPages: total }),
 }))

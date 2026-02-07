@@ -15,6 +15,20 @@
   /* Additional sepia theme customizations */
 }
 
+/* Midnight blue theme specific styles */
+:root[data-theme="midnight"] {
+  /* Additional midnight theme customizations */
+}
+
+:root[data-theme="midnight"] ::-webkit-scrollbar-thumb {
+  background-color: #2a3f6e;
+  border-radius: 9999px;
+}
+
+:root[data-theme="midnight"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #3a5599;
+}
+
 /* Smooth theme transitions */
 :root {
   transition: background-color 0.2s ease, color 0.2s ease;

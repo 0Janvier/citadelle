@@ -20,6 +20,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: `${mod}+W`, description: 'Fermer l\'onglet' },
       { keys: `${mod}+P`, description: 'Imprimer' },
       { keys: `${mod}+${shift}+P`, description: 'Palette de commandes' },
+      { keys: `${mod}+K`, description: 'Switcher de fichiers' },
     ],
   },
   {
@@ -65,21 +66,16 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ],
   },
   {
-    title: 'Revision',
-    shortcuts: [
-      { keys: `${mod}+Alt+C`, description: 'Panneau commentaires' },
-    ],
-  },
-  {
     title: 'Panneaux',
     shortcuts: [
+      { keys: `${mod}+${shift}+M`, description: 'Commentaires' },
+      { keys: `${mod}+${shift}+G`, description: 'Glossaire des termes' },
       { keys: `${mod}+${shift}+J`, description: 'Pieces du document' },
-      { keys: `${mod}+${shift}+M`, description: 'Table des matieres' },
       { keys: `${mod}+${shift}+C`, description: 'Clauses' },
       { keys: `${mod}+${shift}+V`, description: 'Variables' },
       { keys: `${mod}+${shift}+K`, description: 'Codes juridiques' },
+      { keys: `${mod}+${shift}+E`, description: 'Echeances' },
       { keys: `${mod}+${shift}+H`, description: 'Historique des versions' },
-      { keys: `${mod}+${shift}+G`, description: 'Glossaire' },
       { keys: `${mod}+${shift}+.`, description: 'Rouvrir dernier panneau' },
     ],
   },

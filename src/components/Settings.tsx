@@ -1,24 +1,31 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import {
+  Settings as SettingsIcon,
+  Pencil,
+  Palette,
+  Scale,
+  FileText,
+  Library,
+  Wrench,
+} from 'lucide-react'
 import { SettingsGeneral } from './settings/SettingsGeneral'
 import { SettingsEditor } from './settings/SettingsEditor'
 import { SettingsAppearance } from './settings/SettingsAppearance'
 import { SettingsCabinet } from './settings/SettingsCabinet'
 import { SettingsExportPdf } from './settings/SettingsExportPdf'
 import { SettingsLibrary } from './settings/SettingsLibrary'
-import { SettingsClausier } from './settings/SettingsClausier'
 import { SettingsAdvanced } from './settings/SettingsAdvanced'
 
-type SettingsTab = 'general' | 'editor' | 'appearance' | 'cabinet' | 'export-pdf' | 'library' | 'clausier' | 'advanced'
+type SettingsTab = 'general' | 'editor' | 'appearance' | 'cabinet' | 'export-pdf' | 'library' | 'advanced'
 
-const TABS: { id: SettingsTab; label: string; icon: string }[] = [
-  { id: 'general', label: 'Général', icon: '⚙️' },
-  { id: 'editor', label: 'Éditeur', icon: '📝' },
-  { id: 'appearance', label: 'Apparence', icon: '🎨' },
-  { id: 'cabinet', label: 'Cabinet', icon: '⚖️' },
-  { id: 'export-pdf', label: 'Export PDF', icon: '📄' },
-  { id: 'library', label: 'Bibliothèque', icon: '📚' },
-  { id: 'clausier', label: 'Clausier (ancien)', icon: '📋' },
-  { id: 'advanced', label: 'Avancé', icon: '🔧' },
+const TABS: { id: SettingsTab; label: string; icon: ReactNode }[] = [
+  { id: 'general', label: 'Général', icon: <SettingsIcon size={16} /> },
+  { id: 'editor', label: 'Éditeur', icon: <Pencil size={16} /> },
+  { id: 'appearance', label: 'Apparence', icon: <Palette size={16} /> },
+  { id: 'cabinet', label: 'Cabinet', icon: <Scale size={16} /> },
+  { id: 'export-pdf', label: 'Export PDF', icon: <FileText size={16} /> },
+  { id: 'library', label: 'Bibliothèque', icon: <Library size={16} /> },
+  { id: 'advanced', label: 'Avancé', icon: <Wrench size={16} /> },
 ]
 
 const TAB_TITLES: Record<SettingsTab, string> = {
@@ -28,7 +35,6 @@ const TAB_TITLES: Record<SettingsTab, string> = {
   cabinet: 'Cabinet',
   'export-pdf': 'Export PDF',
   library: 'Bibliothèque',
-  clausier: 'Clausier (ancien)',
   advanced: 'Avancé',
 }
 
@@ -69,8 +75,8 @@ export function Settings({ open, onClose }: SettingsProps) {
                     : 'hover:bg-[var(--editor-bg)]'
                 }`}
               >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
+                <span className="mr-2 inline-flex items-center">{tab.icon}</span>
+                <span className="text-sm">{tab.label}</span>
               </button>
             ))}
           </nav>
@@ -104,7 +110,6 @@ export function Settings({ open, onClose }: SettingsProps) {
             {activeTab === 'cabinet' && <SettingsCabinet />}
             {activeTab === 'export-pdf' && <SettingsExportPdf onClose={onClose} />}
             {activeTab === 'library' && <SettingsLibrary />}
-            {activeTab === 'clausier' && <SettingsClausier />}
             {activeTab === 'advanced' && <SettingsAdvanced />}
           </div>
         </div>

@@ -18,7 +18,7 @@ export function SettingsGeneral() {
           onChange={(e) => settings.setAutoSaveInterval(Number(e.target.value) * 1000)}
           className="w-full"
         />
-        <div className="text-sm text-gray-500 mt-1">
+        <div className="text-sm text-[var(--text-secondary)] mt-1">
           {settings.autoSaveInterval / 1000} secondes
         </div>
       </div>

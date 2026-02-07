@@ -289,16 +289,8 @@ interface PreviewLineProps {
 
 function PreviewLine({ level, settings, indent = 0 }: PreviewLineProps) {
   const formats = [settings.level1Format, settings.level2Format, settings.level3Format, settings.level4Format]
-  const parts: string[] = []
-
-  for (let i = 0; i < level; i++) {
-    const format = formats[i]
-    if (format !== 'none') {
-      parts.push(formatPreviewNumber(1, format))
-    }
-  }
-
-  const numbering = parts.length > 0 ? parts.join(settings.separator) + settings.separator : ''
+  const format = formats[level - 1]
+  const numbering = format !== 'none' ? formatPreviewNumber(1, format) + settings.separator : ''
 
   return (
     <div style={{ paddingLeft: `${indent * 16}px` }} className="flex items-center gap-2">

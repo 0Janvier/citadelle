@@ -9,12 +9,15 @@ import { useSettingsStore } from '../store/useSettingsStore'
 import { useEditorStore } from '../store/useEditorStore'
 import { usePageStore } from '../store/usePageStore'
 import { useCollapsibleStore } from '../store/useCollapsibleStore'
+import { useTrackChangesStore } from '../store/useTrackChangesStore'
+import { useLawyerProfileStore } from '../store/useLawyerProfileStore'
 import { useAutoSave } from '../hooks/useAutoSave'
 import { usePagination } from '../hooks/usePagination'
 import { PageViewSystem } from './page/PageViewSystem'
 import { ContinuousPageView } from './page/ContinuousPageView'
 import { ScrollPageBreakOverlay } from './page/ScrollPageBreakOverlay'
 import { TableFloatingToolbar, TableContextMenu } from './table'
+import { BubbleToolbar } from './editor/BubbleToolbar'
 import '../styles/editor.css'
 
 interface EditorProps {
@@ -125,6 +128,36 @@ export function Editor({ documentId }: EditorProps) {
           --paragraph-spacing: ${paragraphSpacing}em;
         `,
       },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false
+        const clauseData = event.dataTransfer?.getData('application/citadelle-clause')
+        if (!clauseData) return false
+
+        event.preventDefault()
+        try {
+          const content = JSON.parse(clauseData)
+          const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY })
+          if (dropPos) {
+            const tr = view.state.tr
+            const pos = dropPos.pos
+            const node = view.state.schema.nodeFromJSON(content)
+            tr.insert(pos, node.content)
+            view.dispatch(tr)
+          }
+          return true
+        } catch {
+          return false
+        }
+      },
+      handleDOMEvents: {
+        dragover: (_view, event) => {
+          if (event.dataTransfer?.types.includes('application/citadelle-clause')) {
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+          }
+          return false
+        },
+      },
     },
     onUpdate: ({ editor }) => {
       isInternalUpdate.current = true
@@ -144,10 +177,16 @@ export function Editor({ documentId }: EditorProps) {
   }, [editorExtensions, typewriterScrollPosition])
 
   // Pagination pour la previsualisation en mode scroll et continu
-  const { pages } = usePagination({
+  const { pages, totalPages: paginationTotal, currentPage: paginationCurrent } = usePagination({
     editor,
     enabled: viewMode === 'page' || viewMode === 'continuous' || (viewMode === 'scroll' && showScrollPageBreaks),
   })
+
+  // Push page info to store for StatusBar
+  const setPageInfo = useEditorStore((state) => state.setPageInfo)
+  useEffect(() => {
+    setPageInfo(paginationCurrent, paginationTotal)
+  }, [paginationCurrent, paginationTotal, setPageInfo])
 
   // Share the editor instance with other components via store
   useEffect(() => {
@@ -159,6 +198,33 @@ export function Editor({ documentId }: EditorProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]) // setActiveEditor is stable from Zustand
+
+  // Sync track changes state from store to editor extension
+  useEffect(() => {
+    if (!editor) return
+
+    const syncTracking = () => {
+      const { isTracking, authorName } = useTrackChangesStore.getState()
+      const storage = editor.storage.trackChanges
+      if (!storage) return
+
+      // Sync author name
+      const profile = useLawyerProfileStore.getState()
+      const resolvedAuthor = [profile.prenom, profile.nom].filter(Boolean).join(' ') || authorName
+      storage.authorName = resolvedAuthor
+
+      // Sync tracking state
+      if (isTracking && !storage.isTracking) {
+        editor.commands.enableTracking()
+      } else if (!isTracking && storage.isTracking) {
+        editor.commands.disableTracking()
+      }
+    }
+
+    syncTracking()
+    const unsub = useTrackChangesStore.subscribe(syncTracking)
+    return () => unsub()
+  }, [editor])
 
   // Update editor content when document changes from external source
   useEffect(() => {
@@ -337,7 +403,7 @@ export function Editor({ documentId }: EditorProps) {
 
   if (!document) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
         Aucun document sélectionné
       </div>
     )
@@ -374,7 +440,8 @@ export function Editor({ documentId }: EditorProps) {
         <PageViewSystem documentId={documentId} editor={editor} />
       )}
 
-      {/* Table management components */}
+      {/* Floating toolbars */}
+      {editor && <BubbleToolbar editor={editor} />}
       <TableFloatingToolbar editor={editor} />
       <TableContextMenu editor={editor} />
     </div>

@@ -68,6 +68,7 @@ interface TocStore {
   // Actions
   generateToc: (editor: Editor) => void
   navigateToEntry: (editor: Editor, entry: TocEntry) => void
+  insertTocInDocument: (editor: Editor) => void
 }
 
 // Generate unique ID for heading
@@ -168,35 +169,12 @@ const buildHierarchyWithNumbering = (
     // Increment counter for this level
     counters[entry.level]++
 
-    // Build numbering string
+    // Build numbering string (flat per-level, matches PDF export style)
     let numbering = ''
     if (settings.showNumbering) {
-      const parts: string[] = []
-
-      // Find the parent levels in the stack
-      const parentLevels: number[] = []
-      for (const item of stack) {
-        if (item.entry.level < entry.level) {
-          parentLevels.push(item.entry.level)
-        }
-      }
-
-      // Add parent numberings
-      for (const lvl of parentLevels) {
-        const format = getFormatForLevel(lvl, settings)
-        if (format !== 'none') {
-          parts.push(formatNumber(counters[lvl], format))
-        }
-      }
-
-      // Add current level numbering
       const currentFormat = getFormatForLevel(entry.level, settings)
       if (currentFormat !== 'none') {
-        parts.push(formatNumber(counters[entry.level], currentFormat))
-      }
-
-      if (parts.length > 0) {
-        numbering = parts.join(settings.separator) + settings.separator
+        numbering = formatNumber(counters[entry.level], currentFormat) + settings.separator
       }
     }
 
@@ -296,6 +274,50 @@ export const useTocStore = create<TocStore>()(
         // Build hierarchical structure with proper numbering
         const hierarchicalEntries = buildHierarchyWithNumbering(flatEntries, settings)
         set({ entries: hierarchicalEntries })
+      },
+
+      insertTocInDocument: (editor) => {
+        if (!editor) return
+
+        const { entries } = get()
+        if (entries.length === 0) return
+
+        // Build flat list of entries with numbering for insertion
+        const flattenEntries = (items: TocEntry[], indent = 0): { text: string; indent: number }[] => {
+          const result: { text: string; indent: number }[] = []
+          for (const item of items) {
+            const prefix = item.numbering ? `${item.numbering} ` : ''
+            result.push({ text: `${prefix}${item.text}`, indent })
+            if (item.children.length > 0) {
+              result.push(...flattenEntries(item.children, indent + 1))
+            }
+          }
+          return result
+        }
+
+        const tocLines = flattenEntries(entries)
+
+        // Build TipTap JSON content
+        const content: any[] = [
+          {
+            type: 'heading',
+            attrs: { level: 2 },
+            content: [{ type: 'text', text: 'TABLE DES MATIERES' }],
+          },
+        ]
+
+        for (const line of tocLines) {
+          const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(line.indent)
+          content.push({
+            type: 'paragraph',
+            content: [{ type: 'text', text: `${indent}${line.text}` }],
+          })
+        }
+
+        // Add horizontal rule after TOC
+        content.push({ type: 'horizontalRule' })
+
+        editor.chain().focus().insertContent(content).run()
       },
 
       navigateToEntry: (editor, entry) => {

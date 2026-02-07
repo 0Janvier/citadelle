@@ -10,7 +10,7 @@ import { Settings } from './components/Settings'
 import { FindReplacePanel } from './components/FindReplacePanel'
 import { NewDocumentDialog } from './components/templates'
 import { SaveAsTemplateDialog } from './components/templates/SaveAsTemplateDialog'
-import { CompactSidebar } from './components/CompactSidebar'
+import { CompactSidebar, OVERLAY_WIDTH, OVERLAY_GAP, COMPACT_PANEL_IDS } from './components/CompactSidebar'
 import { GlobalSearch } from './components/search/GlobalSearch'
 import { ProjectSearch } from './components/search/ProjectSearch'
 import { PdfExportSettingsDialog } from './components/PdfExportSettingsDialog'
@@ -20,7 +20,10 @@ import { RecoveryDialog } from './components/recovery/RecoveryDialog'
 import { ExportProgressOverlay } from './components/ExportProgressOverlay'
 import { WelcomeScreen, useShowWelcome } from './components/WelcomeScreen'
 import { CommentPanel } from './components/comments/CommentPanel'
+import { DossierPicker, ClientPicker, QuickTaskPopover } from './components/GoldoCab'
+import { QuickFileSwitcher } from './components/QuickFileSwitcher'
 import { useCommentStore } from './store/useCommentStore'
+import { useGoldocabDataStore } from './store/useGoldocabDataStore'
 import { useLawyerProfileStore } from './store/useLawyerProfileStore'
 import { usePanelStore } from './store/usePanelStore'
 import { useDocumentStore } from './store/useDocumentStore'
@@ -79,12 +82,19 @@ function App() {
   // Dialog states
   const [showNewDocDialog, setShowNewDocDialog] = useState(false)
   const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false)
+  const [showDossierPicker, setShowDossierPicker] = useState(false)
+  const [showClientPicker, setShowClientPicker] = useState<'client' | 'adverse' | null>(null)
+  const [showQuickTask, setShowQuickTask] = useState(false)
   const shortcutsDialogOpen = useEditorStore((state) => state.shortcutsDialogOpen)
   const setShortcutsDialogOpen = useEditorStore((state) => state.setShortcutsDialogOpen)
 
   // Panel store for advanced features
   const activePanel = usePanelStore((state) => state.activePanel)
   const closePanel = usePanelStore((state) => state.closePanel)
+  const isPanelPinned = usePanelStore((state) => state.isPinned)
+
+  // Le panneau droit est épinglé et visible = le contenu doit se décaler
+  const showPinnedSpacer = !isDistractionFree && isPanelPinned && activePanel && COMPACT_PANEL_IDS.includes(activePanel)
 
   // Enable global keyboard shortcuts
   useKeyboardShortcuts()
@@ -92,16 +102,47 @@ function App() {
   // Enable native macOS menu events
   useNativeMenuEvents()
 
-  // Listen for show-new-doc-dialog and save-as-template events
+  // Listen for show-new-doc-dialog, save-as-template, and GoldoCab events
   useEffect(() => {
     const showNewDoc = () => setShowNewDocDialog(true)
     const showSaveTemplate = () => setShowSaveAsTemplate(true)
+    const showDossier = () => setShowDossierPicker(true)
+    const showClient = () => setShowClientPicker('client')
+    const showAdverse = () => setShowClientPicker('adverse')
+    const showTask = () => setShowQuickTask(true)
     window.addEventListener('show-new-doc-dialog', showNewDoc)
     window.addEventListener('show-save-as-template', showSaveTemplate)
+    window.addEventListener('goldocab-dossier-picker', showDossier)
+    window.addEventListener('goldocab-client-picker', showClient)
+    window.addEventListener('goldocab-adverse-picker', showAdverse)
+    window.addEventListener('goldocab-quick-task', showTask)
     return () => {
       window.removeEventListener('show-new-doc-dialog', showNewDoc)
       window.removeEventListener('show-save-as-template', showSaveTemplate)
+      window.removeEventListener('goldocab-dossier-picker', showDossier)
+      window.removeEventListener('goldocab-client-picker', showClient)
+      window.removeEventListener('goldocab-adverse-picker', showAdverse)
+      window.removeEventListener('goldocab-quick-task', showTask)
     }
+  }, [])
+
+  // Check GoldoCab availability on mount
+  useEffect(() => {
+    useGoldocabDataStore.getState().checkStatus()
+  }, [])
+
+  // Refresh linked dossier data on window focus
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const docId = useDocumentStore.getState().activeDocumentId
+        if (docId) {
+          useGoldocabDataStore.getState().refreshLinkedDossierIfStale(docId)
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
   // Confirm before closing window with unsaved documents
@@ -283,6 +324,14 @@ function App() {
           <StatusBar />
         </div>
 
+        {/* Spacer pour décaler le contenu quand le panneau droit est épinglé */}
+        {showPinnedSpacer && (
+          <div
+            className="shrink-0 transition-all duration-300"
+            style={{ width: OVERLAY_WIDTH + OVERLAY_GAP }}
+          />
+        )}
+
         {/* Sidebar compacte avec overlays */}
         {!isDistractionFree && <CompactSidebar />}
 
@@ -291,6 +340,7 @@ function App() {
       </div>
 
       <CommandPalette />
+      <QuickFileSwitcher />
       <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ToastContainer />
       <NewDocumentDialog
@@ -321,6 +371,19 @@ function App() {
       <FootnoteEditor />
       <RecoveryDialog />
       <ExportProgressOverlay />
+      <DossierPicker
+        isOpen={showDossierPicker}
+        onClose={() => setShowDossierPicker(false)}
+      />
+      <ClientPicker
+        isOpen={showClientPicker !== null}
+        onClose={() => setShowClientPicker(null)}
+        target={showClientPicker || 'client'}
+      />
+      <QuickTaskPopover
+        isOpen={showQuickTask}
+        onClose={() => setShowQuickTask(false)}
+      />
       {showWelcome && <WelcomeScreen onDismiss={dismissWelcome} />}
     </div>
   )

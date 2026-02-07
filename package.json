@@ -1,6 +1,6 @@
 {
   "name": "citadelle",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Éditeur texte/markdown ultraléger et moderne",
   "type": "module",
   "scripts": {

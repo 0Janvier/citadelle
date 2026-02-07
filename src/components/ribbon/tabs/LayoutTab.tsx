@@ -9,7 +9,9 @@ import {
   RotateCcw,
   Ruler,
   FileDown,
+  RefreshCw,
   Settings2,
+  ListOrdered,
 } from 'lucide-react'
 import { usePageStore } from '../../../store/usePageStore'
 import { useEditorStore } from '../../../store/useEditorStore'
@@ -40,6 +42,7 @@ const PAGE_SIZES: { label: string; format: PageFormat; description: string }[] =
 export function LayoutTab() {
   const [showMarginsMenu, setShowMarginsMenu] = useState(false)
   const [showSizeMenu, setShowSizeMenu] = useState(false)
+  const [showNumberingMenu, setShowNumberingMenu] = useState(false)
 
   const margins = usePageStore((state) => state.margins)
   const setMargins = usePageStore((state) => state.setMargins)
@@ -50,12 +53,14 @@ export function LayoutTab() {
 
   const setPdfExportSettingsOpen = useEditorStore((state) => state.setPdfExportSettingsOpen)
   const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
-  const { exportToPDF } = useExportPDFNative()
+  const { exportToPDF, quickExportToPDF, getLastExportPath } = useExportPDFNative()
 
   const paragraphSpacing = useSettingsStore((state) => state.paragraphSpacing)
   const paragraphIndent = useSettingsStore((state) => state.paragraphIndent)
   const setParagraphSpacing = useSettingsStore((state) => state.setParagraphSpacing)
   const setParagraphIndent = useSettingsStore((state) => state.setParagraphIndent)
+  const headingNumbering = useSettingsStore((state) => state.headingNumbering)
+  const setHeadingNumbering = useSettingsStore((state) => state.setHeadingNumbering)
 
   const handleMarginsChange = (preset: typeof MARGIN_PRESETS[number]) => {
     setMargins(preset.values)
@@ -101,23 +106,26 @@ export function LayoutTab() {
             <span>Marges</span>
           </RibbonButton>
           {showMarginsMenu && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-[var(--bg)] border border-[var(--border)]
-              rounded-lg shadow-lg z-dropdown overflow-hidden animate-scaleIn">
-              <div className="py-1">
-                {MARGIN_PRESETS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => handleMarginsChange(preset)}
-                    className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
-                      ${getCurrentMarginLabel() === preset.label ? 'bg-[var(--accent)]/10' : ''}`}
-                  >
-                    <div className="text-sm font-medium">{preset.label}</div>
-                    <div className="text-xs text-[var(--text-secondary)]">{preset.description}</div>
-                  </button>
-                ))}
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowMarginsMenu(false)} />
+              <div className="absolute top-full left-0 mt-1 w-48 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg shadow-lg z-dropdown overflow-hidden animate-scaleIn">
+                <div className="py-1">
+                  {MARGIN_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => handleMarginsChange(preset)}
+                      className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
+                        ${getCurrentMarginLabel() === preset.label ? 'bg-[var(--accent)]/10' : ''}`}
+                    >
+                      <div className="text-sm font-medium">{preset.label}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">{preset.description}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
@@ -142,23 +150,26 @@ export function LayoutTab() {
             <span>{getCurrentSizeLabel()}</span>
           </RibbonButton>
           {showSizeMenu && (
-            <div className="absolute top-full left-0 mt-1 w-44 bg-[var(--bg)] border border-[var(--border)]
-              rounded-lg shadow-lg z-dropdown overflow-hidden animate-scaleIn">
-              <div className="py-1">
-                {PAGE_SIZES.map((size) => (
-                  <button
-                    key={size.label}
-                    type="button"
-                    onClick={() => handleSizeChange(size)}
-                    className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
-                      ${getCurrentSizeLabel() === size.label ? 'bg-[var(--accent)]/10' : ''}`}
-                  >
-                    <div className="text-sm font-medium">{size.label}</div>
-                    <div className="text-xs text-[var(--text-secondary)]">{size.description}</div>
-                  </button>
-                ))}
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowSizeMenu(false)} />
+              <div className="absolute top-full left-0 mt-1 w-44 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg shadow-lg z-dropdown overflow-hidden animate-scaleIn">
+                <div className="py-1">
+                  {PAGE_SIZES.map((size) => (
+                    <button
+                      key={size.label}
+                      type="button"
+                      onClick={() => handleSizeChange(size)}
+                      className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
+                        ${getCurrentSizeLabel() === size.label ? 'bg-[var(--accent)]/10' : ''}`}
+                    >
+                      <div className="text-sm font-medium">{size.label}</div>
+                      <div className="text-xs text-[var(--text-secondary)]">{size.description}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </RibbonGroup>
@@ -177,6 +188,73 @@ export function LayoutTab() {
 
       <RibbonDivider />
 
+      {/* Numerotation */}
+      <RibbonGroup label="Numerotation">
+        <div className="relative">
+          <RibbonButton
+            variant="large"
+            onClick={() => setShowNumberingMenu(!showNumberingMenu)}
+            tooltip="Numerotation des titres"
+            isActive={headingNumbering.enabled}
+          >
+            <ListOrdered size={20} />
+            <span>{headingNumbering.enabled ? (headingNumbering.style === 'juridique' ? 'I. A. 1.' : '1.1.1.') : 'Aucune'}</span>
+          </RibbonButton>
+          {showNumberingMenu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowNumberingMenu(false)} />
+              <div className="absolute top-full left-0 mt-1 w-52 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg shadow-lg z-dropdown overflow-hidden animate-scaleIn">
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeadingNumbering({ enabled: !headingNumbering.enabled })
+                      setShowNumberingMenu(false)
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <div className="text-sm font-medium">
+                      {headingNumbering.enabled ? 'Desactiver' : 'Activer'}
+                    </div>
+                    <div className="text-xs text-[var(--text-secondary)]">
+                      {headingNumbering.enabled ? 'Masquer la numerotation' : 'Afficher la numerotation'}
+                    </div>
+                  </button>
+                  <div className="border-t border-[var(--border)] my-1" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeadingNumbering({ style: 'juridique', enabled: true })
+                      setShowNumberingMenu(false)
+                    }}
+                    className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
+                      ${headingNumbering.style === 'juridique' && headingNumbering.enabled ? 'bg-[var(--accent)]/10' : ''}`}
+                  >
+                    <div className="text-sm font-medium">Juridique</div>
+                    <div className="text-xs text-[var(--text-secondary)]">I., A., 1., a., i.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHeadingNumbering({ style: 'numeric', enabled: true })
+                      setShowNumberingMenu(false)
+                    }}
+                    className={`w-full px-3 py-2 text-left hover:bg-[var(--bg-hover)] transition-colors
+                      ${headingNumbering.style === 'numeric' && headingNumbering.enabled ? 'bg-[var(--accent)]/10' : ''}`}
+                  >
+                    <div className="text-sm font-medium">Numerique</div>
+                    <div className="text-xs text-[var(--text-secondary)]">1., 1.1., 1.1.1.</div>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </RibbonGroup>
+
+      <RibbonDivider />
+
       {/* Export PDF */}
       <RibbonGroup label="Export PDF">
         <RibbonButton
@@ -187,6 +265,15 @@ export function LayoutTab() {
         >
           <FileDown size={20} />
           <span>Exporter</span>
+        </RibbonButton>
+        <RibbonButton
+          variant="large"
+          onClick={() => activeDocumentId && quickExportToPDF(activeDocumentId)}
+          disabled={!activeDocumentId || !getLastExportPath(activeDocumentId || '')}
+          tooltip={activeDocumentId && getLastExportPath(activeDocumentId) ? `Re-exporter : ${getLastExportPath(activeDocumentId)!.split('/').pop()}` : 'Re-exporter (exporter d\'abord)'}
+        >
+          <RefreshCw size={20} />
+          <span>Re-export</span>
         </RibbonButton>
         <RibbonButton
           variant="large"

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useEditorStore } from '../store/useEditorStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useClosedTabsStore } from '../store/useClosedTabsStore'
 import { Dialog } from './Dialog'
 
 export function TabBar() {
@@ -20,6 +21,20 @@ export function TabBar() {
   // Drag & drop state
   const dragRef = useRef<{ dragIndex: number; overIndex: number } | null>(null)
   const reorderDocuments = useDocumentStore((state) => state.reorderDocuments)
+  const duplicateDocument = useDocumentStore((state) => state.duplicateDocument)
+  const closedTabsCount = useClosedTabsStore((state) => state.closedTabs.length)
+
+  const handleReopenClosed = useCallback(() => {
+    const tab = useClosedTabsStore.getState().popClosedTab()
+    if (tab) {
+      addDocument({
+        title: tab.title,
+        content: tab.content,
+        filePath: tab.filePath,
+        isDirty: true,
+      })
+    }
+  }, [addDocument])
 
   const handleContextMenu = useCallback((e: React.MouseEvent, docId: string) => {
     e.preventDefault()
@@ -49,9 +64,15 @@ export function TabBar() {
         if (doc?.filePath) navigator.clipboard.writeText(doc.filePath)
         break
       }
+      case 'duplicate':
+        duplicateDocument(docId)
+        break
+      case 'reopen-closed':
+        handleReopenClosed()
+        break
     }
     setContextMenu(null)
-  }, [contextMenu, documents, removeDocument])
+  }, [contextMenu, documents, removeDocument, duplicateDocument, handleReopenClosed])
 
   if (!showTabBar) return null
 
@@ -197,14 +218,19 @@ export function TabBar() {
       {/* Context menu */}
       {contextMenu && (
         <>
-          <div className="fixed inset-0 z-40" onClick={closeContextMenu} />
+          <div className="fixed inset-0 z-40" onClick={closeContextMenu} onKeyDown={(e) => { if (e.key === 'Escape') closeContextMenu() }} />
           <div
-            className="fixed z-50 bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-xl py-1 min-w-[180px]"
+            className="fixed z-50 bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-xl py-1 min-w-[180px] animate-scaleIn"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('close')}>Fermer</button>
             <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('close-others')}>Fermer les autres</button>
             <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('close-right')}>Fermer à droite</button>
+            <div className="h-px bg-[var(--border)] my-1" />
+            <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('duplicate')}>Dupliquer</button>
+            {closedTabsCount > 0 && (
+              <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('reopen-closed')}>Rouvrir le dernier fermé</button>
+            )}
             <div className="h-px bg-[var(--border)] my-1" />
             <button className="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--bg-hover)] text-[var(--text)]" onClick={() => handleContextAction('copy-path')}>Copier le chemin</button>
           </div>

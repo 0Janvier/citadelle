@@ -14,7 +14,15 @@ export function ClauseCard({ clause, onInsert, isInserting }: ClauseCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <div className="border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)] hover:shadow-md transition-shadow">
+    <div
+      className="border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)] hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/citadelle-clause', JSON.stringify(clause.contenu))
+        e.dataTransfer.setData('text/plain', clause.texteRecherche)
+        e.dataTransfer.effectAllowed = 'copy'
+      }}
+    >
       {/* En-tête */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">

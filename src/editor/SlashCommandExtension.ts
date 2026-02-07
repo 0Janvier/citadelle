@@ -5,6 +5,7 @@ import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Snippet } from '../types/editor-features'
+import { useTocStore } from '../store/useTocStore'
 
 export interface SlashCommandOptions {
   suggestion: {
@@ -149,11 +150,30 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
               const selectedItem = items[selectedIndex]
               if (selectedItem && state.range) {
                 const { from, to } = state.range
-                editor.chain()
-                  .focus()
-                  .deleteRange({ from, to })
-                  .insertContent(selectedItem.contenu)
-                  .run()
+                // Special handling for certain block types
+                if (selectedItem.id === 'block-footnote') {
+                  editor.chain().focus().deleteRange({ from, to }).run()
+                  // Use insertFootnote command if available
+                  if (editor.commands.insertFootnote) {
+                    editor.commands.insertFootnote()
+                  }
+                } else if (selectedItem.id === 'block-date') {
+                  // Generate fresh date at execution time
+                  const mois = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre']
+                  const now = new Date()
+                  const dateText = `${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`
+                  editor.chain().focus().deleteRange({ from, to }).insertContent(dateText).run()
+                } else if (selectedItem.id === 'block-toc') {
+                  editor.chain().focus().deleteRange({ from, to }).run()
+                  useTocStore.getState().generateToc(editor)
+                  useTocStore.getState().insertTocInDocument(editor)
+                } else {
+                  editor.chain()
+                    .focus()
+                    .deleteRange({ from, to })
+                    .insertContent(selectedItem.contenu)
+                    .run()
+                }
               }
               return true
             }
@@ -207,11 +227,27 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
                   selectedIndex: state.selectedIndex,
                   command: (item: Snippet) => {
                     if (state.range) {
-                      editor.chain()
-                        .focus()
-                        .deleteRange(state.range)
-                        .insertContent(item.contenu)
-                        .run()
+                      if (item.id === 'block-footnote') {
+                        editor.chain().focus().deleteRange(state.range).run()
+                        if (editor.commands.insertFootnote) {
+                          editor.commands.insertFootnote()
+                        }
+                      } else if (item.id === 'block-date') {
+                        const mois = ['janvier','fevrier','mars','avril','mai','juin','juillet','aout','septembre','octobre','novembre','decembre']
+                        const now = new Date()
+                        const dateText = `${now.getDate()} ${mois[now.getMonth()]} ${now.getFullYear()}`
+                        editor.chain().focus().deleteRange(state.range).insertContent(dateText).run()
+                      } else if (item.id === 'block-toc') {
+                        editor.chain().focus().deleteRange(state.range).run()
+                        useTocStore.getState().generateToc(editor)
+                        useTocStore.getState().insertTocInDocument(editor)
+                      } else {
+                        editor.chain()
+                          .focus()
+                          .deleteRange(state.range)
+                          .insertContent(item.contenu)
+                          .run()
+                      }
                     }
                   },
                   clientRect: () => new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top),

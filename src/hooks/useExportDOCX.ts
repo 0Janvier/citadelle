@@ -40,6 +40,8 @@ import {
   getPageSizeForDocx,
   replaceStaticVariables,
 } from '../lib/exportUtils'
+import { HeadingNumberer } from '../lib/headingNumbering'
+import { usePdfExportSettingsStore } from '../store/usePdfExportSettingsStore'
 
 interface ExportDOCXOptions {
   title?: string
@@ -80,7 +82,7 @@ class FootnoteCollector {
 }
 
 // Convertir le contenu TipTap en éléments docx
-function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent: number; paragraphSpacing: number }, footnoteCollector?: FootnoteCollector): (Paragraph | Table)[] {
+function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent: number; paragraphSpacing: number }, footnoteCollector?: FootnoteCollector, numberer?: HeadingNumberer | null): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = []
 
   if (!content.content) return elements
@@ -146,6 +148,18 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
           1: '1B2A4A', 2: '1B2A4A', 3: '2E5090', 4: '4A4A4A',
         }
         const hColor = headingColors[level]
+
+        // Prepend numbering if enabled
+        const headingNumber = numberer?.increment(level)
+        const numberRun = headingNumber
+          ? [new TextRun({
+              text: headingNumber + ' ',
+              bold: true,
+              color: hColor || undefined,
+              size: level === 1 ? 32 : level === 2 ? 28 : level === 3 ? 24 : 22,
+            })]
+          : []
+
         const coloredRuns = hColor
           ? textRuns.map((run) => {
               if (run instanceof TextRun) {
@@ -160,7 +174,7 @@ function convertContentToDocx(content: JSONContent, settings?: { paragraphIndent
             })
           : textRuns
         elements.push(new Paragraph({
-          children: coloredRuns,
+          children: [...numberRun, ...coloredRuns],
           heading: mapHeadingLevel(level),
           alignment,
           spacing: { before: 400, after: 200 },
@@ -755,11 +769,17 @@ export function useExportDOCX() {
       // Create a local footnote collector for this export (avoids shared module-level state)
       const footnoteCollector = new FootnoteCollector()
 
+      // Créer le numéroteur (utilise les mêmes settings que le PDF)
+      const pdfSettings = usePdfExportSettingsStore.getState()
+      const docxNumberer = pdfSettings.headingNumbering.enabled
+        ? new HeadingNumberer(pdfSettings.headingNumbering)
+        : null
+
       // Convertir le contenu
       const docElements = convertContentToDocx(content, {
         paragraphIndent: typographySettings.paragraphIndent,
         paragraphSpacing: typographySettings.paragraphSpacing,
-      }, footnoteCollector)
+      }, footnoteCollector, docxNumberer)
 
       // Calculer les marges de page
       let pageMargins = {

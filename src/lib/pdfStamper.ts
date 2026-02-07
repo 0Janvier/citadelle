@@ -28,6 +28,8 @@ export type StampPosition =
   | 'bottom-center'
   | 'bottom-right'
 
+export type StampFont = 'helvetica' | 'times' | 'courier'
+
 export interface StampConfig {
   prefix: string        // "Piece n " par defaut
   cabinetName: string   // Nom du cabinet
@@ -36,6 +38,15 @@ export interface StampConfig {
   fontSize: number      // 11 par defaut
   sizeScale: number     // 100 par defaut (%)
   allPages: boolean     // Tamponner toutes les pages ou juste la premiere
+
+  // Personnalisation avancee
+  fontFamily: StampFont         // Police (helvetica par defaut)
+  customTextColor?: string      // Hex (#RRGGBB), override le style
+  customBgColor?: string        // Hex (#RRGGBB), override le style
+  customBorderColor?: string    // Hex (#RRGGBB), override le style
+  opacity: number               // Opacite globale 0-100 (100 par defaut)
+  margin: number                // Marge depuis le bord en pt (30 par defaut)
+  additionalLine: string        // Ligne supplementaire sous le cabinet
 }
 
 export const DEFAULT_STAMP_CONFIG: StampConfig = {
@@ -46,6 +57,13 @@ export const DEFAULT_STAMP_CONFIG: StampConfig = {
   fontSize: 11,
   sizeScale: 100,
   allPages: false,
+  fontFamily: 'helvetica',
+  customTextColor: undefined,
+  customBgColor: undefined,
+  customBorderColor: undefined,
+  opacity: 100,
+  margin: 30,
+  additionalLine: '',
 }
 
 export const STAMP_STYLE_LABELS: Record<StampStyle, string> = {
@@ -66,6 +84,12 @@ export const STAMP_POSITION_LABELS: Record<StampPosition, string> = {
   'bottom-left': 'Bas gauche',
   'bottom-center': 'Bas centre',
   'bottom-right': 'Bas droite',
+}
+
+export const STAMP_FONT_LABELS: Record<StampFont, string> = {
+  helvetica: 'Helvetica',
+  times: 'Times New Roman',
+  courier: 'Courier',
 }
 
 // ============================================================================
@@ -134,7 +158,71 @@ const STAMP_STYLES: Record<StampStyle, StyleDef> = {
   },
 }
 
-const STAMP_MARGIN = 30
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** Parse hex color (#RRGGBB or #RGB) to [r, g, b] in 0-1 range */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const clean = hex.replace('#', '')
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16) / 255
+    const g = parseInt(clean[1] + clean[1], 16) / 255
+    const b = parseInt(clean[2] + clean[2], 16) / 255
+    return [r, g, b]
+  }
+  if (clean.length === 6) {
+    const r = parseInt(clean.substring(0, 2), 16) / 255
+    const g = parseInt(clean.substring(2, 4), 16) / 255
+    const b = parseInt(clean.substring(4, 6), 16) / 255
+    return [r, g, b]
+  }
+  return null
+}
+
+/** Apply custom color overrides to a style definition */
+function applyCustomColors(style: StyleDef, config: StampConfig): StyleDef {
+  const result = JSON.parse(JSON.stringify(style)) as StyleDef
+
+  const textColor = config.customTextColor ? hexToRgb(config.customTextColor) : null
+  const bgColor = config.customBgColor ? hexToRgb(config.customBgColor) : null
+  const borderColor = config.customBorderColor ? hexToRgb(config.customBorderColor) : null
+
+  if (textColor) {
+    result.text.color = textColor
+    if (result.accentBar) {
+      result.accentBar.color = textColor
+    }
+  }
+
+  if (bgColor) {
+    if (result.background) {
+      result.background.color = bgColor
+    } else {
+      result.background = { color: bgColor, opacity: 0.92 }
+    }
+  }
+
+  if (borderColor) {
+    if (result.border) {
+      result.border.color = borderColor
+    } else {
+      result.border = { width: 1, color: borderColor }
+    }
+  }
+
+  return result
+}
+
+// ============================================================================
+// Font mapping
+// ============================================================================
+
+const FONT_MAP: Record<StampFont, { regular: StandardFonts; bold: StandardFonts }> = {
+  helvetica: { regular: StandardFonts.Helvetica, bold: StandardFonts.HelveticaBold },
+  times: { regular: StandardFonts.TimesRoman, bold: StandardFonts.TimesRomanBold },
+  courier: { regular: StandardFonts.Courier, bold: StandardFonts.CourierBold },
+}
 
 // ============================================================================
 // Text Wrapping Helper
@@ -185,10 +273,9 @@ function calculatePosition(
   pageWidth: number,
   pageHeight: number,
   stampWidth: number,
-  stampHeight: number
+  stampHeight: number,
+  margin: number
 ): { x: number; y: number } {
-  const margin = STAMP_MARGIN
-
   const positions: Record<StampPosition, { x: number; y: number }> = {
     'top-left': { x: margin, y: pageHeight - margin - stampHeight },
     'top-center': { x: (pageWidth - stampWidth) / 2, y: pageHeight - margin - stampHeight },
@@ -214,9 +301,12 @@ function drawRectangularStamp(
   style: StyleDef
 ) {
   const { width, height } = page.getSize()
+  const stampMargin = config.margin ?? 30
+  const globalOpacity = (config.opacity ?? 100) / 100
 
   const pieceText = config.prefix + ' ' + pieceNumber
   const cabinetText = config.cabinetName || ''
+  const additionalText = config.additionalLine || ''
 
   const scale = (config.sizeScale || 100) / 100
   const fontSize = (config.fontSize || 11) * scale
@@ -231,30 +321,31 @@ function drawRectangularStamp(
   // Calculate cabinet text lines
   const maxTextWidth = Math.max(pieceWidth, 80 * scale)
   const cabinetLines = wrapText(cabinetText, font, fontSizeSmall, maxTextWidth)
+  const additionalLines = wrapText(additionalText, font, fontSizeSmall, maxTextWidth)
 
   // Final width based on widest text
   let textWidth = pieceWidth
-  for (const line of cabinetLines) {
+  for (const line of [...cabinetLines, ...additionalLines]) {
     const lineWidth = font.widthOfTextAtSize(line, fontSizeSmall)
     textWidth = Math.max(textWidth, lineWidth)
   }
 
   const lineHeight = fontSize * 1.2
   const lineHeightSmall = fontSizeSmall * 1.2
-  const textHeight = lineHeight + cabinetLines.length * lineHeightSmall
+  const textHeight = lineHeight + (cabinetLines.length + additionalLines.length) * lineHeightSmall
 
   let stampWidth = textWidth + paddingX * 2
   const stampHeight = textHeight + paddingY * 2
 
   if (style.fullWidth) {
-    stampWidth = width - STAMP_MARGIN * 2
+    stampWidth = width - stampMargin * 2
   }
 
   if (style.accentBar) {
     stampWidth += (style.accentBar.width + 4) * scale
   }
 
-  const position = calculatePosition(config.position, width, height, stampWidth, stampHeight)
+  const position = calculatePosition(config.position, width, height, stampWidth, stampHeight, stampMargin)
 
   // Draw background
   if (style.background) {
@@ -264,7 +355,7 @@ function drawRectangularStamp(
       width: stampWidth,
       height: stampHeight,
       color: rgb(style.background.color[0], style.background.color[1], style.background.color[2]),
-      opacity: style.background.opacity,
+      opacity: style.background.opacity * globalOpacity,
     })
   }
 
@@ -277,7 +368,7 @@ function drawRectangularStamp(
       width: barWidth,
       height: stampHeight,
       color: rgb(style.accentBar.color[0], style.accentBar.color[1], style.accentBar.color[2]),
-      opacity: 1,
+      opacity: globalOpacity,
     })
   }
 
@@ -291,6 +382,7 @@ function drawRectangularStamp(
       height: stampHeight,
       borderColor: rgb(style.border.color[0], style.border.color[1], style.border.color[2]),
       borderWidth: borderWidth,
+      opacity: globalOpacity,
     })
 
     if (style.border.double) {
@@ -302,6 +394,7 @@ function drawRectangularStamp(
         height: stampHeight - innerOffset * 2,
         borderColor: rgb(style.border.color[0], style.border.color[1], style.border.color[2]),
         borderWidth: borderWidth * 0.5,
+        opacity: globalOpacity,
       })
     }
   }
@@ -315,8 +408,28 @@ function drawRectangularStamp(
   }
 
   let textY = position.y + paddingY
+  const textOpacity = globalOpacity
 
-  // Draw cabinet lines (bottom, centered)
+  // Draw additional lines (bottommost)
+  for (let i = additionalLines.length - 1; i >= 0; i--) {
+    const line = additionalLines[i]
+    const lineWidth = font.widthOfTextAtSize(line, fontSizeSmall)
+    const lineX = style.fullWidth
+      ? contentX + (contentWidth - lineWidth) / 2
+      : contentX + (textWidth - lineWidth) / 2
+
+    page.drawText(line, {
+      x: lineX,
+      y: textY,
+      size: fontSizeSmall,
+      font: font,
+      color: rgb(style.text.color[0], style.text.color[1], style.text.color[2]),
+      opacity: textOpacity * 0.65,
+    })
+    textY += lineHeightSmall
+  }
+
+  // Draw cabinet lines (middle)
   for (let i = cabinetLines.length - 1; i >= 0; i--) {
     const line = cabinetLines[i]
     const lineWidth = font.widthOfTextAtSize(line, fontSizeSmall)
@@ -330,6 +443,7 @@ function drawRectangularStamp(
       size: fontSizeSmall,
       font: font,
       color: rgb(style.text.color[0], style.text.color[1], style.text.color[2]),
+      opacity: textOpacity,
     })
     textY += lineHeightSmall
   }
@@ -345,6 +459,7 @@ function drawRectangularStamp(
     size: fontSize,
     font: fontBold,
     color: rgb(style.text.color[0], style.text.color[1], style.text.color[2]),
+    opacity: textOpacity,
   })
 }
 
@@ -366,10 +481,13 @@ export async function stampPdf(
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true })
 
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const fontFamily = config.fontFamily || 'helvetica'
+  const fonts = FONT_MAP[fontFamily] || FONT_MAP.helvetica
+  const font = await pdfDoc.embedFont(fonts.regular)
+  const fontBold = await pdfDoc.embedFont(fonts.bold)
 
-  const style = STAMP_STYLES[config.style] || STAMP_STYLES.elegant
+  const baseStyle = STAMP_STYLES[config.style] || STAMP_STYLES.elegant
+  const style = applyCustomColors(baseStyle, config)
 
   // Determine which pages to stamp
   const pages = config.allPages ? pdfDoc.getPages() : [pdfDoc.getPage(0)]

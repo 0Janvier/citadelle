@@ -36,7 +36,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
           {pdfSettings.headingNumbering.enabled && (
             <div className="ml-6 space-y-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Style</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">Style</label>
                 <select
                   value={pdfSettings.headingNumbering.style}
                   onChange={(e) => pdfSettings.setNumberingStyle(e.target.value as 'juridique' | 'numeric')}
@@ -47,7 +47,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Profondeur max</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">Profondeur max</label>
                 <select
                   value={pdfSettings.headingNumbering.maxLevel}
                   onChange={(e) => pdfSettings.setNumberingMaxLevel(Number(e.target.value))}
@@ -70,7 +70,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
         <h4 className="text-sm font-medium mb-3">Typographie</h4>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Police</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Police</label>
             <select
               value={pdfSettings.typography.fontFamily}
               onChange={(e) => pdfSettings.setFontFamily(e.target.value as 'Garamond' | 'Roboto')}
@@ -81,7 +81,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">
               Taille de police ({pdfSettings.typography.baseFontSize}pt)
             </label>
             <input
@@ -101,7 +101,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
         <h4 className="text-sm font-medium mb-3">Mise en page</h4>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Format</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Format</label>
             <select
               value={pdfSettings.pageLayout.format}
               onChange={(e) => pdfSettings.setPageFormat(e.target.value as 'A4' | 'Letter' | 'Legal')}
@@ -113,7 +113,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Orientation</label>
+            <label className="block text-xs text-[var(--text-secondary)] mb-1">Orientation</label>
             <select
               value={pdfSettings.pageLayout.orientation}
               onChange={(e) => pdfSettings.setOrientation(e.target.value as 'portrait' | 'landscape')}
@@ -138,7 +138,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
           </svg>
           Paramètres avancés d'export PDF
         </button>
-        <p className="text-xs text-gray-500 mt-2 text-center">
+        <p className="text-xs text-[var(--text-secondary)] mt-2 text-center">
           Couleurs des titres, marges, en-têtes, pieds de page...
         </p>
       </div>
@@ -146,7 +146,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
       {/* Preview */}
       <div className="border-t border-[var(--border)] pt-6">
         <h4 className="text-sm font-medium mb-3">Aperçu de la numérotation</h4>
-        <div className="border border-[var(--border)] rounded-lg p-4 bg-white dark:bg-gray-800 font-serif text-sm space-y-1">
+        <div className="border border-[var(--border)] rounded-lg p-4 bg-[var(--editor-bg)] font-serif text-sm space-y-1">
           {pdfSettings.headingNumbering.enabled ? (
             <>
               <div className="font-bold text-base">
@@ -161,7 +161,7 @@ export function SettingsExportPdf({ onClose }: SettingsExportPdfProps) {
                 </div>
               )}
               {pdfSettings.headingNumbering.maxLevel >= 4 && (
-                <div className="ml-12 text-gray-600">
+                <div className="ml-12 text-[var(--text-secondary)]">
                   {pdfSettings.headingNumbering.style === 'juridique' ? 'a.' : '1.1.1.1.'} Sous-détail
                 </div>
               )}

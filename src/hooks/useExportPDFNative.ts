@@ -37,6 +37,9 @@ import { usePdfExportSettingsStore } from '../store/usePdfExportSettingsStore'
 import { useVersionStore } from '../store/useVersionStore'
 import { HeadingNumberer } from '../lib/headingNumbering'
 
+// Map of document ID -> last export path (for quick re-export)
+const lastExportPaths = new Map<string, string>()
+
 // pdfmake et ses fonts - on n'initialise pas au chargement du module
 // car les imports ESM peuvent ne pas être prêts immédiatement
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -929,15 +932,20 @@ export function useExportPDFNative() {
           const baseContent = Array.isArray(content) ? content : [content]
           if (!pdfSettings.includeTOC) return baseContent
 
-          // Generate TOC from headings
+          // Generate TOC from headings (with same numbering as body)
           const tocEntries: PdfMakeContent[] = []
+          const tocNumberer = pdfSettings.headingNumbering.enabled
+            ? new HeadingNumberer(pdfSettings.headingNumbering)
+            : null
           const scanForHeadings = (node: JSONContent) => {
             if (node.type === 'heading' && node.attrs?.level && node.content) {
               const text = node.content.map((c: JSONContent) => c.text || '').join('')
               if (text.trim()) {
                 const level = node.attrs.level as number
+                const tocNum = tocNumberer?.increment(level)
+                const displayText = tocNum ? tocNum + ' ' + text : text
                 tocEntries.push({
-                  text,
+                  text: displayText,
                   fontSize: level === 1 ? 12 : level === 2 ? 11 : 10,
                   bold: level <= 2,
                   margin: [(level - 1) * 15, 2, 0, 2] as [number, number, number, number],
@@ -1176,6 +1184,7 @@ export function useExportPDFNative() {
 
       console.log('PDF Export: Writing file...')
       await writeBinaryFile(outputPath, pdfBuffer)
+      lastExportPaths.set(documentId, outputPath)
       toast.success('PDF exporté avec succès')
       console.log('PDF Export: Success!')
 
@@ -1618,8 +1627,125 @@ export function useExportPDFNative() {
     }
   }
 
+  const quickExportToPDF = async (documentId: string) => {
+    const lastPath = lastExportPaths.get(documentId)
+    if (!lastPath) {
+      // No previous export, fall back to regular export
+      return exportToPDF(documentId)
+    }
+
+    const { setExporting } = useEditorStore.getState()
+    try {
+      const initialized = await initializePdfMake()
+      if (!initialized) {
+        toast.error('Erreur d\'initialisation des polices PDF')
+        return
+      }
+
+      const doc = useDocumentStore.getState().getDocument(documentId)
+      if (!doc) {
+        toast.error('Aucun document sélectionné')
+        return
+      }
+
+      const pdfSettings = usePdfExportSettingsStore.getState().getSettings()
+      setExporting(true, 'pdf')
+
+      const numberer = pdfSettings.headingNumbering.enabled
+        ? new HeadingNumberer(pdfSettings.headingNumbering)
+        : null
+
+      const converter = createConverter(numberer, pdfSettings.typography.headingColors)
+      collectedFootnotes.length = 0
+      footnoteCounter = 0
+
+      const content = converter(doc.content)
+      if (!content) {
+        toast.error('Impossible de convertir le document')
+        return
+      }
+
+      // Append footnotes
+      if (collectedFootnotes.length > 0) {
+        const contentArray = Array.isArray(content) ? content : [content]
+        contentArray.push({
+          canvas: [{
+            type: 'line', x1: 0, y1: 0, x2: 150, y2: 0,
+            lineWidth: 0.5, lineColor: '#cccccc',
+          }],
+          margin: [0, 16, 0, 8],
+        } as PdfMakeContent)
+        for (const fn of collectedFootnotes) {
+          contentArray.push({
+            text: [
+              { text: `${fn.number}. `, bold: true, fontSize: 8 },
+              { text: fn.content, fontSize: 8 },
+            ],
+            margin: [0, 2, 0, 2],
+          } as PdfMakeContent)
+        }
+      }
+
+      // Build document definition using same settings as exportToPDF
+      const profile = useLawyerProfileStore.getState()
+      const pageLayout = pdfSettings.pageLayout
+      const marginsInPoints = {
+        top: pageLayout.margins.top * 28.35,
+        bottom: pageLayout.margins.bottom * 28.35,
+        left: pageLayout.margins.left * 28.35,
+        right: pageLayout.margins.right * 28.35,
+      }
+      const preferredFont = pdfSettings.typography.fontFamily
+      const availableFont = preferredFont === 'Garamond' ? getAvailableFont(pdfMake) : 'Roboto'
+
+      const docDefinition: Record<string, unknown> = {
+        pageSize: pageLayout.format,
+        pageOrientation: pageLayout.orientation,
+        pageMargins: [
+          marginsInPoints.left,
+          marginsInPoints.top,
+          marginsInPoints.right,
+          marginsInPoints.bottom,
+        ],
+        content,
+        defaultStyle: {
+          font: availableFont,
+          fontSize: pdfSettings.typography.baseFontSize,
+          lineHeight: pdfSettings.typography.lineHeight,
+        },
+        info: {
+          title: doc.title,
+          author: [profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Citadelle',
+          creator: 'Citadelle - Éditeur juridique',
+        },
+      }
+
+      // Generate PDF
+      const pdfDocGenerator = pdfMake.createPdf(docDefinition)
+      const pdfBuffer = await new Promise<Uint8Array>((resolve, reject) => {
+        pdfDocGenerator.getBuffer((buffer: ArrayBuffer) => {
+          resolve(new Uint8Array(buffer))
+        })
+        setTimeout(() => reject(new Error('PDF generation timeout')), 30000)
+      })
+
+      await writeBinaryFile(lastPath, pdfBuffer)
+      lastExportPaths.set(documentId, lastPath)
+      toast.success(`Re-exporté : ${lastPath.split('/').pop()}`)
+    } catch (error) {
+      console.error('Error quick-exporting PDF:', error)
+      toast.error(`Erreur re-export : ${error}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const getLastExportPath = (documentId: string) => lastExportPaths.get(documentId) || null
+
   return {
     exportToPDF,
+    quickExportToPDF,
+    getLastExportPath,
     exportWithTemplate,
     convertToPdfmake,
   }

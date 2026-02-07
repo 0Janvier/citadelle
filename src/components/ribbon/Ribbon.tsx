@@ -1,6 +1,5 @@
 /**
- * Composant Ribbon principal - Style Word
- * Remplace la Toolbar monolithique par un système d'onglets
+ * Composant Ribbon compact - Barre unique avec onglets dépliables
  */
 
 import { useState, useEffect } from 'react'
@@ -8,11 +7,11 @@ import type { Editor } from '@tiptap/react'
 import {
   FolderOpen,
   Save,
-  Download,
   Undo2,
   Redo2,
   Settings,
   Search,
+  ChevronDown,
 } from 'lucide-react'
 import { useEditorStore } from '../../store/useEditorStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
@@ -39,7 +38,7 @@ const TABS: { id: TabId; label: string; shortcut: string }[] = [
 
 export function Ribbon({ editor }: RibbonProps) {
   const [activeTab, setActiveTab] = useState<TabId>('home')
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const showToolbar = useEditorStore((state) => state.showToolbar)
   const isDistractionFree = useEditorStore((state) => state.isDistractionFree)
@@ -52,35 +51,37 @@ export function Ribbon({ editor }: RibbonProps) {
   // Raccourcis clavier pour les onglets
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + chiffre pour changer d'onglet
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
         const tab = TABS.find((t) => t.shortcut === e.key)
         if (tab) {
           e.preventDefault()
           setActiveTab(tab.id)
-          if (isCollapsed) setIsCollapsed(false)
+          setIsExpanded(true)
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isCollapsed])
+  }, [])
 
-  // Masquer en mode distraction free
-  if (!showToolbar || (isDistractionFree && isCollapsed)) {
+  if (!showToolbar || isDistractionFree) {
     return null
   }
 
-  // Double-clic sur un onglet pour collapse
-  const handleTabDoubleClick = () => {
-    setIsCollapsed(!isCollapsed)
+  const handleTabClick = (tabId: TabId) => {
+    if (activeTab === tabId && isExpanded) {
+      setIsExpanded(false)
+    } else {
+      setActiveTab(tabId)
+      setIsExpanded(true)
+    }
   }
 
   return (
     <div className="ribbon bg-[var(--bg)] border-b border-[var(--border)] flex flex-col select-none">
-      {/* Barre de titre avec actions fichier */}
-      <div className="ribbon-title-bar flex items-center h-9 px-2 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
+      {/* Barre unique : actions + onglets */}
+      <div className="flex items-center h-9 px-2 gap-1">
         {/* Actions fichier */}
         <div className="flex items-center gap-0.5">
           <button
@@ -100,22 +101,9 @@ export function Ribbon({ editor }: RibbonProps) {
           >
             <Save size={16} />
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              // Ouvrir dialog export
-              const event = new CustomEvent('open-export-dialog')
-              window.dispatchEvent(event)
-            }}
-            disabled={!activeDocumentId}
-            className="p-1.5 rounded hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-40"
-            title="Exporter"
-          >
-            <Download size={16} />
-          </button>
         </div>
 
-        <div className="w-px h-5 bg-[var(--border)] mx-2" />
+        <div className="w-px h-5 bg-[var(--border)]" />
 
         {/* Undo/Redo */}
         <div className="flex items-center gap-0.5">
@@ -137,6 +125,35 @@ export function Ribbon({ editor }: RibbonProps) {
           >
             <Redo2 size={16} />
           </button>
+        </div>
+
+        <div className="w-px h-5 bg-[var(--border)]" />
+
+        {/* Onglets */}
+        <div className="flex items-center gap-0.5">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabClick(tab.id)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-colors flex items-center gap-1
+                ${activeTab === tab.id && isExpanded
+                  ? 'bg-[var(--accent)] text-white font-medium'
+                  : activeTab === tab.id
+                    ? 'bg-[var(--bg-hover)] text-[var(--text)] font-medium'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-hover)]'
+                }`}
+              title={`${tab.label} (Cmd+${tab.shortcut})`}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <ChevronDown
+                  size={12}
+                  className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                />
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Spacer */}
@@ -163,32 +180,9 @@ export function Ribbon({ editor }: RibbonProps) {
         </div>
       </div>
 
-      {/* Onglets */}
-      <div className="ribbon-tabs flex items-center h-8 px-2 gap-1">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => {
-              setActiveTab(tab.id)
-              if (isCollapsed) setIsCollapsed(false)
-            }}
-            onDoubleClick={handleTabDoubleClick}
-            className={`px-3 py-1 text-sm rounded-t-md transition-colors
-              ${activeTab === tab.id
-                ? 'bg-[var(--bg)] border-t border-x border-[var(--border)] -mb-px text-[var(--text)] font-medium'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-hover)]'
-              }`}
-            title={`${tab.label} (Cmd+${tab.shortcut})`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Contenu de l'onglet */}
-      {!isCollapsed && (
-        <div className="ribbon-content border-t border-[var(--border)] bg-[var(--bg)] min-h-[72px]">
+      {/* Contenu de l'onglet (déplié uniquement au clic) */}
+      {isExpanded && (
+        <div className="ribbon-content border-t border-[var(--border)] bg-[var(--bg)]">
           {activeTab === 'home' && <HomeTab editor={editor} />}
           {activeTab === 'insert' && <InsertTab editor={editor} />}
           {activeTab === 'layout' && <LayoutTab />}

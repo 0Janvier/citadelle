@@ -1,4 +1,5 @@
 export { TemplateCard } from './TemplateCard'
 export { TemplateGallery } from './TemplateGallery'
 export { TemplateEditor } from './TemplateEditor'
+export { TemplateManager } from './TemplateManager'
 export { NewDocumentDialog } from './NewDocumentDialog'

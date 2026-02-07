@@ -4,6 +4,7 @@
  */
 
 import type { Editor } from '@tiptap/react'
+import { useState } from 'react'
 import {
   MessageSquare,
   MessageSquarePlus,
@@ -14,7 +15,12 @@ import {
   X,
   CheckCheck,
   XCircle,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react'
+import { RibbonButton } from '../RibbonButton'
+import { RibbonGroup, RibbonDivider } from '../RibbonGroup'
+import { RibbonTab } from '../RibbonTab'
 import { useCommentStore } from '../../../store/useCommentStore'
 import { useTrackChangesStore } from '../../../store/useTrackChangesStore'
 import { useDocumentStore } from '../../../store/useDocumentStore'
@@ -32,6 +38,15 @@ export function ReviewTab({ editor }: ReviewTabProps) {
 
   const isTracking = useTrackChangesStore((s) => s.isTracking)
   const toggleTracking = useTrackChangesStore((s) => s.toggleTracking)
+  const showChanges = useTrackChangesStore((s) => s.showChanges)
+  const toggleShowChanges = useTrackChangesStore((s) => s.toggleShowChanges)
+
+  // Change count from editor storage
+  const [changeCount, setChangeCount] = useState(0)
+  if (editor?.storage.trackChanges) {
+    const count = editor.storage.trackChanges.changeCount ?? 0
+    if (count !== changeCount) setChangeCount(count)
+  }
 
   const handleAddComment = () => {
     if (!editor || !activeDocumentId) return
@@ -60,7 +75,6 @@ export function ReviewTab({ editor }: ReviewTabProps) {
     if (newState) {
       const profile = useLawyerProfileStore.getState()
       const author = [profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Auteur'
-      // Sync author name and enable tracking in the extension
       editor.storage.trackChanges.authorName = author
       editor.commands.enableTracking()
     } else {
@@ -71,133 +85,137 @@ export function ReviewTab({ editor }: ReviewTabProps) {
   const hasSelection = editor ? editor.state.selection.from !== editor.state.selection.to : false
 
   return (
-    <div className="ribbon-tab">
+    <RibbonTab>
       {/* Commentaires */}
-      <div className="ribbon-group">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleAddComment}
-            disabled={!hasSelection}
-            className={`flex flex-col items-center justify-center px-3 py-1 rounded text-xs transition-colors min-w-[56px]
-              ${hasSelection
-                ? 'hover:bg-[var(--bg-hover)] text-[var(--text)]'
-                : 'text-[var(--text-secondary)] opacity-50 cursor-not-allowed'
-              }`}
-            title="Ajouter un commentaire (Cmd+Alt+C)"
-          >
-            <MessageSquarePlus className="w-5 h-5 mb-0.5" />
-            <span>Commenter</span>
-          </button>
+      <RibbonGroup label="Commentaires">
+        <RibbonButton
+          variant="large"
+          onClick={handleAddComment}
+          disabled={!hasSelection}
+          tooltip="Ajouter un commentaire (Cmd+Alt+C)"
+        >
+          <MessageSquarePlus size={20} />
+          <span>Commenter</span>
+        </RibbonButton>
+        <RibbonButton
+          variant="large"
+          isActive={showPanel}
+          onClick={togglePanel}
+          tooltip="Panneau commentaires"
+        >
+          <MessageSquare size={20} />
+          <span>Panneau</span>
+        </RibbonButton>
+      </RibbonGroup>
 
-          <button
-            type="button"
-            onClick={togglePanel}
-            className={`flex flex-col items-center justify-center px-3 py-1 rounded text-xs transition-colors min-w-[56px]
-              ${showPanel
-                ? 'bg-[var(--accent-light)] text-[var(--accent)]'
-                : 'hover:bg-[var(--bg-hover)] text-[var(--text)]'
-              }`}
-            title="Panneau commentaires"
-          >
-            <MessageSquare className="w-5 h-5 mb-0.5" />
-            <span>Panneau</span>
-          </button>
-        </div>
-        <div className="ribbon-group-label">Commentaires</div>
-      </div>
+      <RibbonDivider />
 
       {/* Suivi des modifications */}
-      <div className="ribbon-group">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
+      <RibbonGroup label="Suivi">
+        <div className="relative">
+          <RibbonButton
+            variant="large"
+            isActive={isTracking}
             onClick={handleToggleTracking}
-            className={`flex flex-col items-center justify-center px-3 py-1 rounded text-xs transition-colors min-w-[56px]
-              ${isTracking
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                : 'hover:bg-[var(--bg-hover)] text-[var(--text)]'
-              }`}
-            title="Activer/désactiver le suivi des modifications"
+            tooltip="Activer/désactiver le suivi des modifications"
+            className={isTracking ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : ''}
           >
-            <GitCommitHorizontal className="w-5 h-5 mb-0.5" />
+            <GitCommitHorizontal size={20} />
             <span>{isTracking ? 'Actif' : 'Suivi'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor?.commands.acceptChangeAtPos()}
-            disabled={!editor}
-            className="flex flex-col items-center justify-center px-3 py-1 rounded text-xs hover:bg-[var(--bg-hover)] text-[var(--text)] transition-colors min-w-[48px] disabled:opacity-50"
-            title="Accepter la modification"
-          >
-            <Check className="w-5 h-5 mb-0.5 text-green-600" />
-            <span>Accepter</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => editor?.commands.rejectChangeAtPos()}
-            disabled={!editor}
-            className="flex flex-col items-center justify-center px-3 py-1 rounded text-xs hover:bg-[var(--bg-hover)] text-[var(--text)] transition-colors min-w-[48px] disabled:opacity-50"
-            title="Rejeter la modification"
-          >
-            <X className="w-5 h-5 mb-0.5 text-red-600" />
-            <span>Rejeter</span>
-          </button>
+          </RibbonButton>
+          {changeCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+              {changeCount}
+            </span>
+          )}
         </div>
-        <div className="ribbon-group-label">Suivi</div>
-      </div>
+        <div className="flex flex-col gap-0.5">
+          <RibbonButton
+            variant="icon"
+            onClick={() => editor?.commands.goToPreviousChange()}
+            disabled={!editor || changeCount === 0}
+            tooltip="Modification précédente"
+          >
+            <ChevronUp size={16} />
+          </RibbonButton>
+          <RibbonButton
+            variant="icon"
+            onClick={() => editor?.commands.goToNextChange()}
+            disabled={!editor || changeCount === 0}
+            tooltip="Modification suivante"
+          >
+            <ChevronDown size={16} />
+          </RibbonButton>
+        </div>
+        <RibbonButton
+          variant="large"
+          onClick={() => editor?.commands.acceptChangeAtPos()}
+          disabled={!editor}
+          tooltip="Accepter la modification"
+        >
+          <Check size={20} className="text-green-600" />
+          <span>Accepter</span>
+        </RibbonButton>
+        <RibbonButton
+          variant="large"
+          onClick={() => editor?.commands.rejectChangeAtPos()}
+          disabled={!editor}
+          tooltip="Rejeter la modification"
+        >
+          <X size={20} className="text-red-600" />
+          <span>Rejeter</span>
+        </RibbonButton>
+      </RibbonGroup>
+
+      <RibbonDivider />
 
       {/* Tout accepter / rejeter */}
-      <div className="ribbon-group">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => editor?.commands.acceptAllChanges()}
-            disabled={!editor}
-            className="flex flex-col items-center justify-center px-3 py-1 rounded text-xs hover:bg-[var(--bg-hover)] text-[var(--text)] transition-colors min-w-[48px] disabled:opacity-50"
-            title="Accepter toutes les modifications"
-          >
-            <CheckCheck className="w-5 h-5 mb-0.5 text-green-600" />
-            <span>Tout OK</span>
-          </button>
+      <RibbonGroup label="Global">
+        <RibbonButton
+          variant="large"
+          onClick={() => editor?.commands.acceptAllChanges()}
+          disabled={!editor}
+          tooltip="Accepter toutes les modifications"
+        >
+          <CheckCheck size={20} className="text-green-600" />
+          <span>Tout OK</span>
+        </RibbonButton>
+        <RibbonButton
+          variant="large"
+          onClick={() => editor?.commands.rejectAllChanges()}
+          disabled={!editor}
+          tooltip="Rejeter toutes les modifications"
+        >
+          <XCircle size={20} className="text-red-600" />
+          <span>Tout X</span>
+        </RibbonButton>
+      </RibbonGroup>
 
-          <button
-            type="button"
-            onClick={() => editor?.commands.rejectAllChanges()}
-            disabled={!editor}
-            className="flex flex-col items-center justify-center px-3 py-1 rounded text-xs hover:bg-[var(--bg-hover)] text-[var(--text)] transition-colors min-w-[48px] disabled:opacity-50"
-            title="Rejeter toutes les modifications"
-          >
-            <XCircle className="w-5 h-5 mb-0.5 text-red-600" />
-            <span>Tout X</span>
-          </button>
-        </div>
-        <div className="ribbon-group-label">Global</div>
-      </div>
+      <RibbonDivider />
 
       {/* Affichage */}
-      <div className="ribbon-group">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              document.body.classList.toggle('hide-comments')
-            }}
-            className="flex flex-col items-center justify-center px-3 py-1 rounded text-xs hover:bg-[var(--bg-hover)] text-[var(--text)] transition-colors min-w-[56px]"
-            title="Afficher/masquer les commentaires"
-          >
-            {document.body.classList.contains('hide-comments') ? (
-              <EyeOff className="w-5 h-5 mb-0.5" />
-            ) : (
-              <Eye className="w-5 h-5 mb-0.5" />
-            )}
-            <span>Afficher</span>
-          </button>
-        </div>
-        <div className="ribbon-group-label">Affichage</div>
-      </div>
-    </div>
+      <RibbonGroup label="Affichage">
+        <RibbonButton
+          variant="large"
+          onClick={() => document.body.classList.toggle('hide-comments')}
+          tooltip="Afficher/masquer les commentaires"
+        >
+          {document.body.classList.contains('hide-comments') ? <EyeOff size={20} /> : <Eye size={20} />}
+          <span>Coms</span>
+        </RibbonButton>
+        <RibbonButton
+          variant="large"
+          isActive={showChanges}
+          onClick={() => {
+            toggleShowChanges()
+            document.body.classList.toggle('hide-track-changes')
+          }}
+          tooltip="Afficher/masquer les modifications"
+        >
+          {showChanges ? <Eye size={20} /> : <EyeOff size={20} />}
+          <span>Modifs</span>
+        </RibbonButton>
+      </RibbonGroup>
+    </RibbonTab>
   )
 }

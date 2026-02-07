@@ -397,9 +397,9 @@ export function FolderSidebar() {
             className="p-1.5 hover:bg-[var(--editor-bg)] rounded-md transition-colors"
             title="Masquer la sidebar (Cmd+\)"
           >
-            <SidebarCollapseIcon className="w-4 h-4 text-gray-500" />
+            <SidebarCollapseIcon className="w-4 h-4 text-[var(--text-secondary)]" />
           </button>
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 truncate">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] truncate">
             {folderName || 'Fichiers'}
           </span>
         </div>
@@ -408,7 +408,7 @@ export function FolderSidebar() {
           className="p-1.5 hover:bg-[var(--editor-bg)] rounded-md transition-colors"
           title="Ouvrir un dossier"
         >
-          <FolderPlusIcon className="w-4 h-4 text-gray-500" />
+          <FolderPlusIcon className="w-4 h-4 text-[var(--text-secondary)]" />
         </button>
       </div>
 
@@ -440,23 +440,23 @@ export function FolderSidebar() {
       >
         {!rootPath ? (
           <div className="px-4 py-12 text-center">
-            <FolderIcon className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" />
+            <FolderIcon className="w-12 h-12 mx-auto mb-3 text-[var(--text-secondary)]" />
             <button
               onClick={handleSelectFolder}
               className="text-sm text-[var(--accent)] hover:underline"
             >
               Sélectionner un dossier
             </button>
-            <p className="text-xs text-gray-400 mt-2">Cmd+\ pour afficher/masquer</p>
+            <p className="text-xs text-[var(--text-secondary)] mt-2">Cmd+\ pour afficher/masquer</p>
           </div>
         ) : isLoading ? (
           <div className="px-4 py-12 text-center">
             <div className="w-5 h-5 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-gray-500 mt-3">Chargement...</p>
+            <p className="text-xs text-[var(--text-secondary)] mt-3">Chargement...</p>
           </div>
         ) : items.length === 0 ? (
           <div className="px-4 py-12 text-center">
-            <p className="text-sm text-gray-500">Dossier vide</p>
+            <p className="text-sm text-[var(--text-secondary)]">Dossier vide</p>
           </div>
         ) : (
           <FolderTree
@@ -476,14 +476,7 @@ export function FolderSidebar() {
         )}
       </div>
 
-      {/* Keyboard hints (shown when focused) */}
-      {isFocused && rootPath && items.length > 0 && (
-        <div className="px-2 py-1.5 border-t border-[var(--border)] bg-[var(--editor-bg)]">
-          <p className="text-[10px] text-gray-400 text-center">
-            ↑↓ naviguer · ← replier · → déplier · Entrée ouvrir
-          </p>
-        </div>
-      )}
+      {/* Keyboard hints (tooltip on first focus only) */}
 
       {/* Resize handle */}
       <div
@@ -553,7 +546,7 @@ function FolderTree({
             >
               {item.type === 'folder' ? (
                 <ChevronIcon
-                  className={`w-3 h-3 shrink-0 transition-transform duration-150 text-gray-400 ${
+                  className={`w-3 h-3 shrink-0 transition-transform duration-150 text-[var(--text-secondary)] ${
                     isExpanded ? 'rotate-90' : ''
                   }`}
                 />
@@ -563,7 +556,7 @@ function FolderTree({
               {item.type === 'folder' ? (
                 <FolderIcon className={`w-4 h-4 shrink-0 ${isSelected ? 'text-[var(--accent)]' : 'text-[var(--accent)]/70'}`} />
               ) : (
-                <DocumentIcon className="w-4 h-4 shrink-0 text-gray-400" />
+                <DocumentIcon className="w-4 h-4 shrink-0 text-[var(--text-secondary)]" />
               )}
               <span className="text-sm truncate">{item.name}</span>
             </div>

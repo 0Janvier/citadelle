@@ -1,5 +1,5 @@
 // Sidebar compacte avec overlays flottants
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { usePanelStore, PanelType } from '../store/usePanelStore'
 import { useDocumentStore } from '../store/useDocumentStore'
 import { ClauseLibrary } from './clauses/ClauseLibrary'
@@ -11,6 +11,16 @@ import { LegalPageSettings } from './legal/LegalPageSettings'
 import { GoldocabNotesPanel } from './GoldoCab/GoldocabNotesPanel'
 import { FormattingPanel } from './formatting/FormattingPanel'
 import { VersionHistoryPanel } from './versions/VersionHistoryPanel'
+import { VariablePanel } from './variables/VariablePanel'
+import { DeadlinePanel } from './deadlines/DeadlinePanel'
+import { CommentPanel } from './comments/CommentPanel'
+import { DefinedTermsPanel } from './terms/DefinedTermsPanel'
+import { DocumentMapPanel } from './DocumentMapPanel'
+import { CharacterPanel } from './CharacterPanel'
+import { BookmarkPanel } from './BookmarkPanel'
+import { useCommentStore } from '../store/useCommentStore'
+import { useEditorStore } from '../store/useEditorStore'
+import { useLawyerProfileStore } from '../store/useLawyerProfileStore'
 
 // Panneaux retenus avec leurs icones et labels
 interface CompactPanelConfig {
@@ -21,42 +31,43 @@ interface CompactPanelConfig {
   group: 'document' | 'juridique' | 'outils'
 }
 
+// Panneaux visibles dans la sidebar (les autres restent accessibles via CommandPalette)
 const COMPACT_PANELS: CompactPanelConfig[] = [
   // Document
-  { id: 'formatting', icon: <FormattingIcon />, label: 'Format', shortcut: '⌘⇧F', group: 'document' },
-  { id: 'toc', icon: <TocIcon />, label: 'Sommaire', shortcut: '⌘⇧T', group: 'document' },
-  { id: 'pageLayout', icon: <PageLayoutIcon />, label: 'Page', shortcut: '⌘⇧L', group: 'document' },
+  { id: 'document-map', icon: <DocumentMapIcon />, label: 'Plan', shortcut: '⌘⇧O', group: 'document' },
+  { id: 'variables', icon: <VariablesIcon />, label: 'Variables', shortcut: '⌘⇧V', group: 'document' },
   { id: 'versions', icon: <VersionsIcon />, label: 'Versions', shortcut: '⌘⇧H', group: 'document' },
+  { id: 'comments', icon: <CommentsIcon />, label: 'Notes', shortcut: '⌘⇧M', group: 'document' },
   // Juridique
   { id: 'clauses', icon: <ClausesIcon />, label: 'Clauses', shortcut: '⌘⇧C', group: 'juridique' },
   { id: 'codes', icon: <CodesIcon />, label: 'Codes', shortcut: '⌘⇧K', group: 'juridique' },
   { id: 'pieces', icon: <PiecesIcon />, label: 'Pièces', shortcut: '⌘⇧J', group: 'juridique' },
   // Outils
-  { id: 'goldocab', icon: <GoldocabIcon />, label: 'GoldoCab', shortcut: '⌘⇧G', group: 'outils' },
   { id: 'settings', icon: <SettingsIcon />, label: 'Prefs', shortcut: '⌘,', group: 'outils' },
 ]
 
-// Largeur de l'overlay
-const OVERLAY_WIDTH = 380
+// Largeur de l'overlay (exportée pour le layout dans App.tsx)
+export const OVERLAY_WIDTH = 380
+export const OVERLAY_GAP = 8 // gap entre overlay et sidebar
+
+// Tous les panneaux pouvant s'afficher en overlay (sidebar + CommandPalette)
+export const COMPACT_PANEL_IDS: PanelType[] = [
+  'formatting', 'document-map', 'toc', 'variables', 'bookmarks', 'pageLayout', 'versions', 'comments',
+  'clauses', 'codes', 'pieces', 'terms',
+  'characters', 'deadlines', 'goldocab', 'settings',
+]
 
 export function CompactSidebar() {
   const activePanel = usePanelStore((state) => state.activePanel)
   const togglePanel = usePanelStore((state) => state.togglePanel)
   const closePanel = usePanelStore((state) => state.closePanel)
 
-  // État pour épingler l'overlay
-  const [isPinned, setIsPinned] = useState(() => {
-    const saved = localStorage.getItem('citadelle-sidebar-pinned')
-    return saved === 'true'
-  })
+  // État épinglé depuis le store (partagé avec App.tsx pour le layout)
+  const isPinned = usePanelStore((state) => state.isPinned)
+  const setIsPinned = usePanelStore((state) => state.setIsPinned)
 
   const overlayRef = useRef<HTMLDivElement>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
-
-  // Sauvegarder l'état épinglé
-  useEffect(() => {
-    localStorage.setItem('citadelle-sidebar-pinned', isPinned.toString())
-  }, [isPinned])
 
   // Fermer l'overlay au clic extérieur (sauf si épinglé)
   useEffect(() => {
@@ -89,7 +100,7 @@ export function CompactSidebar() {
   }, [activePanel, closePanel, isPinned])
 
   // Vérifier si le panneau actif est dans notre liste
-  const isCompactPanel = COMPACT_PANELS.some(p => p.id === activePanel)
+  const isCompactPanel = COMPACT_PANEL_IDS.includes(activePanel)
   const showOverlay = activePanel && isCompactPanel
 
   const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
@@ -109,11 +120,25 @@ export function CompactSidebar() {
       case 'pageLayout':
         return <LegalPageSettings onClose={closePanel} />
       case 'goldocab':
-        return <GoldocabNotesPanel onClose={closePanel} />
+        return <GoldocabNotesPanel onClose={closePanel} onOpenDossierPicker={() => window.dispatchEvent(new Event('goldocab-dossier-picker'))} />
       case 'settings':
         return <SettingsPanel onClose={closePanel} />
+      case 'variables':
+        return <VariablePanel documentId={activeDocumentId || undefined} onClose={closePanel} />
+      case 'deadlines':
+        return activeDocumentId ? <DeadlinePanel documentId={activeDocumentId} onClose={closePanel} /> : null
       case 'versions':
         return activeDocumentId ? <VersionHistoryPanel documentId={activeDocumentId} onClose={closePanel} /> : null
+      case 'comments':
+        return <CommentPanelConnected onClose={closePanel} />
+      case 'terms':
+        return <DefinedTermsPanel onClose={closePanel} />
+      case 'document-map':
+        return <DocumentMapPanel onClose={closePanel} />
+      case 'characters':
+        return <CharacterPanel onClose={closePanel} />
+      case 'bookmarks':
+        return <BookmarkPanel onClose={closePanel} />
       default:
         return null
     }
@@ -130,7 +155,7 @@ export function CompactSidebar() {
           }`}
           style={{
             width: OVERLAY_WIDTH,
-            right: 88, // 80px sidebar + 8px gap
+            right: (sidebarRef.current?.offsetWidth ?? 80) + OVERLAY_GAP,
             top: 48,
             bottom: 48,
           }}
@@ -211,17 +236,6 @@ function CompactPanelButton({
 }
 
 // Icones (versions simplifiees)
-function TocIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M4 6h16" />
-      <path d="M4 10h12" />
-      <path d="M4 14h14" />
-      <path d="M4 18h10" />
-    </svg>
-  )
-}
-
 function ClausesIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -264,33 +278,12 @@ function SettingsIcon() {
   )
 }
 
-function PageLayoutIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <rect x="4" y="2" width="16" height="20" rx="1" />
-      <path d="M4 6h16" strokeDasharray="2 2" />
-      <path d="M4 18h16" strokeDasharray="2 2" />
-      <path d="M8 2v20" strokeDasharray="2 2" />
-      <path d="M16 2v20" strokeDasharray="2 2" />
-    </svg>
-  )
-}
-
 function PinIcon({ isPinned }: { isPinned: boolean }) {
   return (
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth={1.5}>
       <path d="M12 17v5" />
       <path d="M9 11V6a3 3 0 0 1 6 0v5" />
       <rect x="6" y="11" width="12" height="4" rx="1" />
-    </svg>
-  )
-}
-
-function GoldocabIcon() {
-  return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-      <circle cx="12" cy="10" r="3" fill="currentColor" strokeWidth={0} />
     </svg>
   )
 }
@@ -304,14 +297,77 @@ function VersionsIcon() {
   )
 }
 
-function FormattingIcon() {
+function VariablesIcon() {
   return (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M6 4h8l4 4v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" />
-      <path d="M14 4v4h4" />
-      <path d="M8 13h8" />
-      <path d="M8 17h5" />
-      <path d="M8 9h4" strokeWidth={2} />
+      <path d="M7 4l5 16" />
+      <path d="M12 4l5 16" />
+      <path d="M5 10h14" />
+      <path d="M4 16h14" />
     </svg>
   )
 }
+
+// Wrapper pour connecter CommentPanel au store
+function CommentPanelConnected({ onClose }: { onClose: () => void }) {
+  const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
+  const comments = useCommentStore((state) => state.comments)
+  const addComment = useCommentStore((state) => state.addComment)
+  const resolveComment = useCommentStore((state) => state.resolveComment)
+  const deleteComment = useCommentStore((state) => state.deleteComment)
+  const replyToComment = useCommentStore((state) => state.replyToComment)
+  const activeEditor = useEditorStore((state) => state.activeEditor)
+
+  const docComments = activeDocumentId
+    ? comments.filter((c) => c.documentId === activeDocumentId)
+    : []
+
+  const selectedRange = activeEditor
+    ? (() => {
+        const { from, to } = activeEditor.state.selection
+        return from !== to ? { from, to } : null
+      })()
+    : null
+
+  const authorName = (() => {
+    const profile = useLawyerProfileStore.getState()
+    return [profile.prenom, profile.nom].filter(Boolean).join(' ') || 'Auteur'
+  })()
+
+  return (
+    <CommentPanel
+      comments={docComments}
+      onAddComment={(content, from, to) => {
+        if (activeDocumentId) {
+          addComment(activeDocumentId, authorName, content, from, to)
+        }
+      }}
+      onResolveComment={resolveComment}
+      onDeleteComment={deleteComment}
+      onReplyComment={(parentId, content) => replyToComment(parentId, authorName, content)}
+      selectedRange={selectedRange}
+      onClose={onClose}
+    />
+  )
+}
+
+function CommentsIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
+function DocumentMapIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path d="M3 6h4" />
+      <path d="M3 10h8" />
+      <path d="M3 14h6" />
+      <path d="M3 18h10" />
+      <path d="M17 4v16" strokeDasharray="2 2" />
+    </svg>
+  )
+}
+

@@ -206,7 +206,7 @@ export function PageViewEditor({ documentId, editor }: PageViewEditorProps) {
 
   if (!editor || !document) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
         Aucun document selectionne
       </div>
     )

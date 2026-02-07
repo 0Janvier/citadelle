@@ -94,6 +94,8 @@ declare module '@tiptap/core' {
       rejectChangeAtPos: () => ReturnType
       acceptAllChanges: () => ReturnType
       rejectAllChanges: () => ReturnType
+      goToNextChange: () => ReturnType
+      goToPreviousChange: () => ReturnType
     }
   }
 }
@@ -173,6 +175,7 @@ export const TrackChangesExtension = Extension.create({
     return {
       isTracking: false,
       authorName: 'Auteur',
+      changeCount: 0,
     }
   },
 
@@ -330,6 +333,62 @@ export const TrackChangesExtension = Extension.create({
           dispatch(tr)
           return true
         },
+
+      goToNextChange:
+        () =>
+        ({ state, dispatch }) => {
+          if (!dispatch) return true
+          const { from } = state.selection
+          const insertionType = state.schema.marks.insertion
+          const deletionType = state.schema.marks.deletion
+          const positions: number[] = []
+
+          state.doc.descendants((node, pos) => {
+            if (!node.isText) return
+            const hasChange = node.marks.some(
+              (m) => m.type === insertionType || m.type === deletionType
+            )
+            if (hasChange) positions.push(pos)
+          })
+
+          // Find next position after cursor
+          const next = positions.find((p) => p > from)
+          if (next !== undefined) {
+            dispatch(state.tr.setSelection(TextSelection.create(state.doc, next)))
+          } else if (positions.length > 0) {
+            // Wrap around to first change
+            dispatch(state.tr.setSelection(TextSelection.create(state.doc, positions[0])))
+          }
+          return true
+        },
+
+      goToPreviousChange:
+        () =>
+        ({ state, dispatch }) => {
+          if (!dispatch) return true
+          const { from } = state.selection
+          const insertionType = state.schema.marks.insertion
+          const deletionType = state.schema.marks.deletion
+          const positions: number[] = []
+
+          state.doc.descendants((node, pos) => {
+            if (!node.isText) return
+            const hasChange = node.marks.some(
+              (m) => m.type === insertionType || m.type === deletionType
+            )
+            if (hasChange) positions.push(pos)
+          })
+
+          // Find previous position before cursor
+          const prev = [...positions].reverse().find((p) => p < from)
+          if (prev !== undefined) {
+            dispatch(state.tr.setSelection(TextSelection.create(state.doc, prev)))
+          } else if (positions.length > 0) {
+            // Wrap around to last change
+            dispatch(state.tr.setSelection(TextSelection.create(state.doc, positions[positions.length - 1])))
+          }
+          return true
+        },
     }
   },
 
@@ -339,6 +398,23 @@ export const TrackChangesExtension = Extension.create({
     return [
       new Plugin({
         key: trackChangesPluginKey,
+
+        appendTransaction(_transactions, _oldState, newState) {
+          // Update changeCount in storage by counting marks
+          const insertionType = newState.schema.marks.insertion
+          const deletionType = newState.schema.marks.deletion
+          let count = 0
+          newState.doc.descendants((node) => {
+            if (node.isText) {
+              const hasChange = node.marks.some(
+                (m) => m.type === insertionType || m.type === deletionType
+              )
+              if (hasChange) count++
+            }
+          })
+          storage.changeCount = count
+          return null
+        },
 
         props: {
           // Intercept text input when tracking

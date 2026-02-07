@@ -28,12 +28,23 @@ import { DefinedTermsExtension } from './DefinedTermsExtension'
 import { FootnoteExtension } from './FootnoteExtension'
 import { CommentExtension } from './CommentExtension'
 import { InsertionMark, DeletionMark, TrackChangesExtension } from './TrackChangesExtension'
+import { FrenchTypographyExtension } from './FrenchTypographyExtension'
+import { PasteHandlerExtension } from './PasteHandlerExtension'
 import { common, createLowlight } from 'lowlight'
 import { useSnippetStore } from '../store/useSnippetStore'
 import { useVariableStore } from '../store/useVariableStore'
 import { useDefinedTermsStore } from '../store/useDefinedTermsStore'
 import { searchAllCodes, formatArticleForInsertion, CODE_LABELS } from '../data/codes/index'
 import type { Snippet } from '../types/editor-features'
+
+// Format date in French (e.g., "7 fevrier 2026")
+function formatDateFrench(date: Date): string {
+  const mois = [
+    'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'
+  ]
+  return `${date.getDate()} ${mois[date.getMonth()]} ${date.getFullYear()}`
+}
 
 // Déclaration des types pour les commandes de police
 declare module '@tiptap/core' {
@@ -255,10 +266,69 @@ export const extensions = [
           { id: 'block-pagebreak', nom: 'Saut de page', description: 'Nouvelle page', raccourci: '/page',
             contenu: { type: 'pageBreak' },
             category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          // Commandes juridiques pratiques
+          { id: 'block-date', nom: 'Date du jour', description: 'Insere la date en francais', raccourci: '/date',
+            contenu: { type: 'text', text: formatDateFrench(new Date()) },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-footnote', nom: 'Note de bas de page', description: 'Inserer une note', raccourci: '/note',
+            contenu: { type: 'text', text: '' }, // Handled specially in onSelect
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-signature', nom: 'Bloc signature', description: 'Signature avocat', raccourci: '/signe',
+            contenu: { type: 'doc', content: [
+              { type: 'paragraph', content: [{ type: 'text', text: ' ' }] },
+              { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: '{{avocat.cabinet}}' }] },
+              { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: '{{avocat.prenom}} {{avocat.nom}}' }] },
+              { type: 'paragraph', attrs: { textAlign: 'right' }, content: [{ type: 'text', text: 'Avocat au Barreau de {{avocat.barreau}}' }] },
+            ]},
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-client', nom: 'Coordonnees client', description: 'Bloc client avec variables', raccourci: '/client',
+            contenu: { type: 'doc', content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '{{client.civilite}} {{client.nom}} {{client.prenom}}' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: '{{client.adresse}}' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: '{{client.code_postal}} {{client.ville}}' }] },
+            ]},
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-adverse', nom: 'Coordonnees adverse', description: 'Bloc partie adverse', raccourci: '/adverse',
+            contenu: { type: 'doc', content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '{{adverse.civilite}} {{adverse.nom}} {{adverse.prenom}}' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: '{{adverse.adresse}}' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: '{{adverse.code_postal}} {{adverse.ville}}' }] },
+            ]},
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          // /toc - Table des matieres
+          { id: 'block-toc', nom: 'Table des matieres', description: 'Inserer la table des matieres du document', raccourci: '/toc',
+            contenu: { type: 'text', text: '' }, // special: handled in onSelect
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
         ]
 
         // Regular snippet suggestions
         const snippets = useSnippetStore.getState().getSuggestions(query)
+
+        // Variable suggestions (when query starts with 'var')
+        const isVarQuery = /^var/i.test(query)
+        if (isVarQuery) {
+          const varQuery = query.replace(/^var\s*/i, '').toLowerCase()
+          const defs = useVariableStore.getState().definitions
+          const varSnippets: Snippet[] = defs
+            .filter((d) => !varQuery || d.label.toLowerCase().includes(varQuery) || d.key.toLowerCase().includes(varQuery))
+            .slice(0, 10)
+            .map((d) => ({
+              id: `var-${d.key}`,
+              nom: d.label,
+              description: `{{${d.key}}}`,
+              raccourci: `/var ${d.key}`,
+              contenu: { type: 'text', text: `{{${d.key}}}` },
+              category: 'general' as const,
+              variables: [],
+              isBuiltin: true,
+              usageCount: 0,
+              createdAt: '',
+              updatedAt: '',
+            }))
+          if (varSnippets.length > 0) {
+            return [...snippets, ...varSnippets]
+          }
+        }
 
         // If query starts with 'art' or is a number, also search legal codes
         const isArticleQuery = /^(art|Art|ART|\d)/.test(query)
@@ -312,7 +382,7 @@ export const extensions = [
     },
   }),
 
-  // Legal numbering (I., A., 1., a.)
+  // Legal numbering (I., A., 1., a.) - reads config dynamically from useSettingsStore
   LegalNumberingExtension.configure({
     enabled: true,
   }),
@@ -327,6 +397,14 @@ export const extensions = [
   InsertionMark,
   DeletionMark,
   TrackChangesExtension,
+
+  // French typography: auto NBSP before : ; ? ! and around guillemets
+  FrenchTypographyExtension.configure({
+    enabled: true, // reads dynamically from useSettingsStore in the plugin
+  }),
+
+  // Paste as plain text handler (Cmd+Shift+V)
+  PasteHandlerExtension,
 
   // Defined terms detection and highlighting
   DefinedTermsExtension.configure({

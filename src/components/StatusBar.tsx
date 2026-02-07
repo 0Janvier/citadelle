@@ -1,6 +1,5 @@
 import { useDocumentStore } from '../store/useDocumentStore'
 import { useEditorStore } from '../store/useEditorStore'
-import { useSettingsStore } from '../store/useSettingsStore'
 import type { SaveStatus } from '../store/useEditorStore'
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 
@@ -11,14 +10,17 @@ export function StatusBar() {
   const activeEditor = useEditorStore((state) => state.activeEditor)
   const saveStatus = useEditorStore((state) => state.saveStatus)
   const saveErrorMessage = useEditorStore((state) => state.saveErrorMessage)
-  const lastBackupTime = useEditorStore((state) => state.lastBackupTime)
 
-  // Cursor position tracking
+  const currentPage = useEditorStore((state) => state.currentPage)
+  const totalPages = useEditorStore((state) => state.totalPages)
+
+  // Cursor position + selection word count tracking
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 })
+  const [selectionWordCount, setSelectionWordCount] = useState(0)
 
   const updateCursorPosition = useCallback(() => {
     if (!activeEditor) return
-    const { from } = activeEditor.state.selection
+    const { from, to } = activeEditor.state.selection
     const doc = activeEditor.state.doc
 
     // Calculate line number by counting blocks before cursor
@@ -37,6 +39,15 @@ export function StatusBar() {
     const col = from - blockStart + 1
 
     setCursorPos({ line, col })
+
+    // Selection word count
+    if (from !== to) {
+      const selectedText = doc.textBetween(from, to, ' ')
+      const words = selectedText.trim().split(/\s+/).filter((w) => w.length > 0)
+      setSelectionWordCount(words.length)
+    } else {
+      setSelectionWordCount(0)
+    }
   }, [activeEditor])
 
   useEffect(() => {
@@ -52,192 +63,105 @@ export function StatusBar() {
     }
   }, [activeEditor, updateCursorPosition])
 
+  const [showStatsPopover, setShowStatsPopover] = useState(false)
+  const statsRef = useRef<HTMLDivElement>(null)
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!showStatsPopover) return
+    const handleClick = (e: MouseEvent) => {
+      if (statsRef.current && !statsRef.current.contains(e.target as Node)) {
+        setShowStatsPopover(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showStatsPopover])
+
   // Calculate statistics from document content
   const stats = useMemo(() => {
     if (!activeDocument?.content) {
-      return { words: 0, characters: 0, lines: 0, readingTime: 0 }
+      return { words: 0, characters: 0, charactersNoSpaces: 0, lines: 0, sentences: 0, pages: 0, readingTime: 0 }
     }
 
-    // Extract text from TipTap JSON content
     const extractText = (node: any): string => {
-      if (node.type === 'text') {
-        return node.text || ''
-      }
-      if (node.content) {
-        return node.content.map(extractText).join('')
-      }
+      if (node.type === 'text') return node.text || ''
+      if (node.content) return node.content.map(extractText).join('')
       return ''
     }
 
     const text = extractText(activeDocument.content)
-    const words = text
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length
+    const words = text.trim().split(/\s+/).filter((word) => word.length > 0).length
     const characters = text.length
     const charactersNoSpaces = text.replace(/\s/g, '').length
+    const sentences = text.split(/[.!?]+\s/g).filter((s) => s.trim().length > 0).length
 
-    // Count paragraphs (approximate lines)
     const countNodes = (node: any, type: string): number => {
       if (node.type === type) return 1
-      if (node.content) {
-        return node.content.reduce(
-          (sum: number, child: any) => sum + countNodes(child, type),
-          0
-        )
-      }
+      if (node.content) return node.content.reduce((sum: number, child: any) => sum + countNodes(child, type), 0)
       return 0
     }
 
-    const lines = Math.max(
-      1,
-      countNodes(activeDocument.content, 'paragraph') +
-        countNodes(activeDocument.content, 'heading')
-    )
-
-    // Reading time: average 200 words per minute
+    const lines = Math.max(1, countNodes(activeDocument.content, 'paragraph') + countNodes(activeDocument.content, 'heading'))
     const readingTime = Math.ceil(words / 200)
+    const pages = Math.max(1, Math.ceil(words / 250))
 
-    return {
-      words,
-      characters,
-      charactersNoSpaces,
-      lines,
-      readingTime,
-    }
+    return { words, characters, charactersNoSpaces, lines, sentences, pages, readingTime }
   }, [activeDocument?.content])
 
   if (!showStatusBar) return null
 
   return (
-    <div className="h-6 border-t border-[var(--border)] flex items-center justify-between px-4 text-xs text-gray-600 dark:text-gray-400 bg-[var(--bg)] status-bar">
+    <div className="h-6 border-t border-[var(--border)] flex items-center justify-between px-4 text-xs text-[var(--text-secondary)] bg-[var(--bg)] status-bar">
       <div className="flex items-center gap-4">
         {activeDocument ? (
-          <>
-            <span>{stats.words} mots</span>
-            <span>
-              {stats.characters} caractères ({stats.charactersNoSpaces} sans espaces)
-            </span>
-            <span>{stats.lines} lignes</span>
-            <span>{stats.readingTime} min de lecture</span>
-          </>
+          <div className="relative" ref={statsRef}>
+            <button
+              onClick={() => setShowStatsPopover(!showStatsPopover)}
+              className="hover:text-[var(--text)] transition-colors cursor-pointer"
+              title="Statistiques détaillées"
+            >
+              {selectionWordCount > 0
+                ? <>{selectionWordCount} sel. / {stats.words} mots</>
+                : <>{stats.words} mots</>}
+            </button>
+            {showStatsPopover && (
+              <div className="absolute bottom-full left-0 mb-2 w-56 bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-lg z-50 p-3 animate-scaleIn">
+                <div className="text-sm font-medium mb-2 text-[var(--text)]">Statistiques</div>
+                <div className="space-y-1.5 text-xs">
+                  <StatRow label="Mots" value={stats.words.toLocaleString('fr-FR')} />
+                  <StatRow label="Caractères" value={stats.characters.toLocaleString('fr-FR')} />
+                  <StatRow label="Sans espaces" value={stats.charactersNoSpaces.toLocaleString('fr-FR')} />
+                  <StatRow label="Phrases" value={stats.sentences.toLocaleString('fr-FR')} />
+                  <StatRow label="Paragraphes" value={stats.lines.toLocaleString('fr-FR')} />
+                  <div className="border-t border-[var(--border)] my-1.5" />
+                  <StatRow label="Pages estimées" value={`~${stats.pages}`} />
+                  <StatRow label="Temps de lecture" value={`~${stats.readingTime} min`} />
+                  {totalPages > 0 && (
+                    <StatRow label="Page actuelle" value={`${currentPage} / ${totalPages}`} />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <span>Prêt</span>
         )}
-        <TipRotator />
+        {totalPages > 0 && (
+          <span>Page {currentPage}/{totalPages}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
         {activeDocument && activeEditor && (
           <span>Ln {cursorPos.line}, Col {cursorPos.col}</span>
         )}
-        {activeDocument?.filePath && (
-          <span className="text-gray-500 truncate max-w-xs" title={activeDocument.filePath}>
-            {activeDocument.filePath.split('/').slice(-2).join('/')}
-          </span>
-        )}
-        <FocusModeToggle />
         <span>{zoomLevel}%</span>
-        {lastBackupTime && (
-          <BackupIndicator lastBackupTime={lastBackupTime} />
-        )}
         {activeDocument && (
           <SaveIndicator saveStatus={saveStatus} isDirty={activeDocument.isDirty} errorMessage={saveErrorMessage} />
         )}
       </div>
     </div>
-  )
-}
-
-function FocusModeToggle() {
-  const isDistractionFree = useEditorStore((state) => state.isDistractionFree)
-  const setDistractionFree = useEditorStore((state) => state.setDistractionFree)
-  const typewriterMode = useSettingsStore((state) => state.typewriterMode)
-  const toggleTypewriterMode = useSettingsStore((state) => state.toggleTypewriterMode)
-
-  // Cycle: Normal -> Typewriter -> Distraction-free -> Normal
-  const handleCycle = () => {
-    if (!typewriterMode && !isDistractionFree) {
-      toggleTypewriterMode() // Normal -> Typewriter
-    } else if (typewriterMode && !isDistractionFree) {
-      toggleTypewriterMode()
-      setDistractionFree(true) // Typewriter -> Distraction-free
-    } else {
-      setDistractionFree(false) // Distraction-free -> Normal
-    }
-  }
-
-  const label = isDistractionFree ? 'Focus' : typewriterMode ? 'Machine' : 'Normal'
-
-  return (
-    <button
-      onClick={handleCycle}
-      className="flex items-center gap-1 hover:text-[var(--text)] transition-colors"
-      title={`Mode : ${label} (cliquer pour changer)`}
-    >
-      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="4" />
-      </svg>
-      {label}
-    </button>
-  )
-}
-
-const TIPS = [
-  'Tapez / pour inserer une clause ou un article de code',
-  '\u2318\u21E7P ouvre la palette de commandes',
-  '\u2318\u21E7H affiche l\'historique des versions',
-  '\u2318/ affiche tous les raccourcis clavier',
-  '/art 1240 insere l\'article 1240 du Code civil',
-]
-
-function TipRotator() {
-  const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length))
-  const [visible, setVisible] = useState(true)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
-
-  useEffect(() => {
-    // Hide after 30 seconds
-    timerRef.current = setTimeout(() => setVisible(false), 30000)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [])
-
-  if (!visible) return null
-
-  return (
-    <span
-      className="text-[var(--text-secondary)] italic cursor-pointer hover:text-[var(--text)]"
-      onClick={() => {
-        setTipIndex((i) => (i + 1) % TIPS.length)
-      }}
-      title="Cliquer pour une autre astuce"
-    >
-      {TIPS[tipIndex]}
-    </span>
-  )
-}
-
-function BackupIndicator({ lastBackupTime }: { lastBackupTime: number }) {
-  const [, setTick] = useState(0)
-
-  // Update relative time every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 30000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const elapsed = Date.now() - lastBackupTime
-  const minutes = Math.floor(elapsed / 60000)
-  const label = minutes < 1 ? 'il y a moins d\'1 min' : `il y a ${minutes} min`
-
-  return (
-    <span className="flex items-center gap-1 text-[var(--text-secondary)]" title={`Dernier backup : ${new Date(lastBackupTime).toLocaleTimeString()}`}>
-      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      </svg>
-      {label}
-    </span>
   )
 }
 
@@ -282,5 +206,14 @@ function SaveIndicator({ saveStatus, isDirty, errorMessage }: { saveStatus: Save
     <span className={isDirty ? 'text-amber-500' : 'text-[var(--text-secondary)]'}>
       {isDirty ? '● Non sauvegardé' : '✓ Sauvegardé'}
     </span>
+  )
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-[var(--text-secondary)]">{label}</span>
+      <span className="font-medium text-[var(--text)]">{value}</span>
+    </div>
   )
 }

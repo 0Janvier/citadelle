@@ -1893,6 +1893,43 @@
   color: #f87171;
 }
 
+/* Track changes - tooltip on hover */
+.track-insertion[data-author],
+.track-deletion[data-author] {
+  position: relative;
+  cursor: default;
+}
+
+.track-insertion[data-author]:hover::after,
+.track-deletion[data-author]:hover::after {
+  content: attr(data-author);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-secondary, #333);
+  color: var(--text, #fff);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* Track changes - hide mode */
+.hide-track-changes .track-insertion {
+  background: none;
+  text-decoration: none;
+  color: inherit;
+}
+
+.hide-track-changes .track-deletion {
+  background: none;
+  text-decoration: none;
+  color: inherit;
+}
+
 /* Legacy classes for backwards compat */
 .revision-inserted {
   background-color: rgba(34, 197, 94, 0.2);
@@ -2480,4 +2517,23 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* Recovery banner animations */
+@keyframes recoverySlideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes recoverySlideUp {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-100%); opacity: 0; }
+}
+
+.recovery-banner-enter {
+  animation: recoverySlideDown 0.3s ease-out;
+}
+
+.recovery-banner-exit {
+  animation: recoverySlideUp 0.25s ease-in forwards;
 }

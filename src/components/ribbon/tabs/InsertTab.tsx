@@ -3,7 +3,7 @@
  * Contient : Éléments (Table, Image, Lien), Juridique (Variables, Termes)
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Editor } from '@tiptap/react'
 import {
   Table,
@@ -17,7 +17,9 @@ import {
   BookMarked,
   ListTree,
   Footprints,
+  TableOfContents,
 } from 'lucide-react'
+import { insertTableOfContents } from '../../../lib/tocGenerator'
 import { RibbonButton } from '../RibbonButton'
 import { RibbonGroup, RibbonDivider } from '../RibbonGroup'
 import { RibbonTab } from '../RibbonTab'
@@ -28,6 +30,16 @@ interface InsertTabProps {
 
 export function InsertTab({ editor }: InsertTabProps) {
   const [showTablePicker, setShowTablePicker] = useState(false)
+  const [showLinkPopover, setShowLinkPopover] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const linkInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (showLinkPopover && linkInputRef.current) {
+      linkInputRef.current.focus()
+      linkInputRef.current.select()
+    }
+  }, [showLinkPopover])
 
   if (!editor) return null
 
@@ -56,15 +68,24 @@ export function InsertTab({ editor }: InsertTabProps) {
   }
 
   // Insertion de lien
+  const handleOpenLinkPopover = () => {
+    const previousUrl = editor.getAttributes('link').href || ''
+    setLinkUrl(previousUrl || 'https://')
+    setShowLinkPopover(true)
+  }
+
   const handleInsertLink = () => {
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL:', previousUrl || 'https://')
-    if (url === null) return
-    if (url === '') {
+    if (linkUrl === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
     } else {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+      editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run()
     }
+    setShowLinkPopover(false)
+  }
+
+  const handleRemoveLink = () => {
+    editor.chain().focus().extendMarkRange('link').unsetLink().run()
+    setShowLinkPopover(false)
   }
 
   return (
@@ -81,38 +102,84 @@ export function InsertTab({ editor }: InsertTabProps) {
             <span>Tableau</span>
           </RibbonButton>
           {showTablePicker && (
-            <div className="absolute top-full left-0 mt-1 p-3 bg-[var(--bg)] border border-[var(--border)]
-              rounded-lg shadow-lg z-dropdown animate-scaleIn">
-              <div className="text-xs text-[var(--text-secondary)] mb-2">Sélectionner la taille</div>
-              <div className="grid gap-0.5" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
-                {Array.from({ length: 36 }, (_, i) => {
-                  const row = Math.floor(i / 6) + 1
-                  const col = (i % 6) + 1
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => handleInsertTable(row, col)}
-                      className="w-5 h-5 border border-[var(--border)] hover:bg-[var(--accent)] hover:border-[var(--accent)] transition-colors rounded-sm"
-                      title={`${row} × ${col}`}
-                    />
-                  )
-                })}
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowTablePicker(false)} />
+              <div className="absolute top-full left-0 mt-1 p-3 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg shadow-lg z-dropdown animate-scaleIn">
+                <div className="text-xs text-[var(--text-secondary)] mb-2">Sélectionner la taille</div>
+                <div className="grid gap-0.5" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+                  {Array.from({ length: 36 }, (_, i) => {
+                    const row = Math.floor(i / 6) + 1
+                    const col = (i % 6) + 1
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleInsertTable(row, col)}
+                        className="w-5 h-5 border border-[var(--border)] hover:bg-[var(--accent)] hover:border-[var(--accent)] transition-colors rounded-sm"
+                        title={`${row} × ${col}`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="text-xs text-[var(--text-secondary)] mt-2 text-center">
+                  6 × 6
+                </div>
               </div>
-              <div className="text-xs text-[var(--text-secondary)] mt-2 text-center">
-                6 × 6
-              </div>
-            </div>
+            </>
           )}
         </div>
         <RibbonButton variant="large" onClick={handleInsertImage} tooltip="Insérer une image">
           <Image size={20} />
           <span>Image</span>
         </RibbonButton>
-        <RibbonButton variant="large" onClick={handleInsertLink} tooltip="Insérer un lien (Cmd+K)">
-          <Link size={20} />
-          <span>Lien</span>
-        </RibbonButton>
+        <div className="relative">
+          <RibbonButton variant="large" onClick={handleOpenLinkPopover} tooltip="Insérer un lien (Cmd+K)">
+            <Link size={20} />
+            <span>Lien</span>
+          </RibbonButton>
+          {showLinkPopover && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setShowLinkPopover(false)} />
+              <div className="absolute top-full left-0 mt-1 p-3 bg-[var(--bg)] border border-[var(--border)]
+                rounded-lg shadow-lg z-dropdown animate-scaleIn w-64">
+                <div className="text-xs text-[var(--text-secondary)] mb-2">Adresse du lien</div>
+                <input
+                  ref={linkInputRef}
+                  type="url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleInsertLink()
+                    if (e.key === 'Escape') setShowLinkPopover(false)
+                  }}
+                  placeholder="https://..."
+                  className="w-full px-2.5 py-1.5 text-sm rounded-md border border-[var(--border)]
+                    bg-[var(--editor-bg)] text-[var(--text)] placeholder:text-[var(--text-secondary)]
+                    focus:outline-none focus:border-[var(--accent)]"
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={handleInsertLink}
+                    className="flex-1 px-2.5 py-1 text-xs font-medium rounded-md
+                      bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors"
+                  >
+                    Appliquer
+                  </button>
+                  {editor.isActive('link') && (
+                    <button
+                      onClick={handleRemoveLink}
+                      className="px-2.5 py-1 text-xs font-medium rounded-md
+                        text-[var(--status-error)] hover:bg-[var(--status-error)]/10 transition-colors"
+                    >
+                      Supprimer
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </RibbonGroup>
 
       <RibbonDivider />
@@ -145,6 +212,14 @@ export function InsertTab({ editor }: InsertTabProps) {
           >
             <Minus size={16} />
             <span>Ligne</span>
+          </RibbonButton>
+          <RibbonButton
+            variant="default"
+            onClick={() => insertTableOfContents(editor)}
+            tooltip="Inserer une table des matieres"
+          >
+            <TableOfContents size={16} />
+            <span>Sommaire</span>
           </RibbonButton>
         </div>
       </RibbonGroup>

@@ -1,13 +1,17 @@
 // Panneau pour créer et gérer les notes/tâches GoldoCab
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useGoldocabNotesStore, GoldocabNote } from '../../store/useGoldocabNotesStore'
+import { useGoldocabDataStore } from '../../store/useGoldocabDataStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
+import { open } from '@tauri-apps/api/shell'
+import type { GoldocabItem } from '../../types/goldocab'
 
 interface GoldocabNotesPanelProps {
   onClose: () => void
+  onOpenDossierPicker?: () => void
 }
 
-export function GoldocabNotesPanel({ onClose: _onClose }: GoldocabNotesPanelProps) {
+export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: GoldocabNotesPanelProps) {
   const {
     notes,
     isLoading,
@@ -25,6 +29,38 @@ export function GoldocabNotesPanel({ onClose: _onClose }: GoldocabNotesPanelProp
   const documents = useDocumentStore((state) => state.documents)
   const activeDocument = documents.find((d) => d.id === activeDocumentId)
 
+  const linkedDossier = useGoldocabDataStore((s) =>
+    activeDocumentId ? s.getLinkedDossier(activeDocumentId) : null
+  )
+  const isAvailable = useGoldocabDataStore((s) => s.isAvailable)
+  const getDossierItems = useGoldocabDataStore((s) => s.getDossierItems)
+
+  const [dossierItems, setDossierItems] = useState<GoldocabItem[]>([])
+  const [loadingItems, setLoadingItems] = useState(false)
+
+  // Fetch dossier items when linked dossier changes
+  useEffect(() => {
+    if (linkedDossier?.dossierId) {
+      setLoadingItems(true)
+      getDossierItems(linkedDossier.dossierId).then((items) => {
+        setDossierItems(items)
+        setLoadingItems(false)
+      })
+    } else {
+      setDossierItems([])
+    }
+  }, [linkedDossier?.dossierId, getDossierItems])
+
+  const refreshDossierItems = () => {
+    if (!linkedDossier?.dossierId) return
+    setLoadingItems(true)
+    useGoldocabDataStore.getState().clearCache()
+    getDossierItems(linkedDossier.dossierId).then((items) => {
+      setDossierItems(items)
+      setLoadingItems(false)
+    })
+  }
+
   const [showNewForm, setShowNewForm] = useState<'note' | 'task' | null>(null)
   const [content, setContent] = useState('')
   const [priority, setPriority] = useState<'low' | 'normal' | 'high'>('normal')
@@ -40,8 +76,8 @@ export function GoldocabNotesPanel({ onClose: _onClose }: GoldocabNotesPanelProp
       content: content.trim(),
       documentId: activeDocumentId,
       documentTitle: activeDocument?.title || null,
-      dossierId: null,
-      dossierName: null,
+      dossierId: linkedDossier ? String(linkedDossier.dossierId) : null,
+      dossierName: linkedDossier?.dossierName || null,
       priority: showNewForm === 'task' ? priority : 'normal',
       dueDate: showNewForm === 'task' && dueDate ? dueDate : null,
     })
@@ -85,10 +121,95 @@ export function GoldocabNotesPanel({ onClose: _onClose }: GoldocabNotesPanelProp
         </div>
       )}
 
+      {/* Section Dossier lie */}
+      {isAvailable && (
+        <div className="mx-4 mt-3 p-3 rounded-lg border border-[var(--border)]">
+          {linkedDossier ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-medium uppercase tracking-wide opacity-40">Dossier</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => open(`goldocab://dossier/${linkedDossier.dossierId}`)}
+                    className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-secondary)] text-[var(--accent)] transition-colors"
+                    title="Ouvrir dans GoldoCab"
+                  >
+                    Ouvrir
+                  </button>
+                  {onOpenDossierPicker && (
+                    <button
+                      onClick={onOpenDossierPicker}
+                      className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors"
+                    >
+                      Changer
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="text-sm font-medium text-[var(--text)]">{linkedDossier.dossierName}</div>
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] mt-0.5">
+                {linkedDossier.clientName && <span>{linkedDossier.clientName}</span>}
+                {linkedDossier.numeroRg && <span>RG: {linkedDossier.numeroRg}</span>}
+                {linkedDossier.juridiction && <span>{linkedDossier.juridiction}</span>}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-xs text-[var(--text-secondary)] mb-2">Aucun dossier lie</p>
+              {onOpenDossierPicker && (
+                <button
+                  onClick={onOpenDossierPicker}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 transition-opacity"
+                >
+                  Lier un dossier
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Taches du dossier (lecture depuis GoldoCab) */}
+      {linkedDossier && dossierItems.length > 0 && (
+        <div className="mx-4 mt-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-medium uppercase tracking-wide opacity-40">Taches du dossier</span>
+            <button
+              onClick={refreshDossierItems}
+              className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors"
+              disabled={loadingItems}
+            >
+              {loadingItems ? '...' : 'Rafraichir'}
+            </button>
+          </div>
+          <div className="space-y-1 max-h-[150px] overflow-y-auto">
+            {dossierItems.filter(i => i.est_tache).slice(0, 10).map((item) => (
+              <div key={item.id} className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-[var(--bg-secondary)]">
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{
+                    backgroundColor:
+                      item.en_cours ? '#3b82f6' :
+                      (item.urgence ?? 0) >= 3 ? '#ef4444' :
+                      (item.urgence ?? 0) >= 2 ? '#f59e0b' : '#9ca3af'
+                  }}
+                />
+                <span className="flex-1 truncate text-[var(--text)]">{item.titre || 'Sans titre'}</span>
+                {item.date_echeance && (
+                  <span className="text-[var(--text-secondary)] shrink-0">
+                    {new Date(item.date_echeance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Document actif */}
       {activeDocument && (
         <div className="mx-4 mt-3 p-2 bg-[var(--bg-secondary)] rounded-lg text-sm">
-          <span className="text-[var(--text-secondary)]">Lié à : </span>
+          <span className="text-[var(--text-secondary)]">Lie a : </span>
           <span className="text-[var(--text)] font-medium">{activeDocument.title}</span>
         </div>
       )}
@@ -256,7 +377,7 @@ function NoteCard({
   isLoading: boolean
 }) {
   const priorityColors = {
-    low: 'text-gray-500',
+    low: 'text-[var(--text-secondary)]',
     normal: 'text-blue-500',
     high: 'text-red-500',
   }

@@ -4,10 +4,15 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { useSettingsStore } from '../store/useSettingsStore'
+
+export type NumberingStyleType = 'juridique' | 'numeric'
 
 export interface LegalNumberingOptions {
   enabled: boolean
   styles: NumberingStyle[]
+  numberingStyle: NumberingStyleType
+  startLevel: number // H level to start numbering (default 2, since H1 is title)
 }
 
 export type NumberingLevel = 1 | 2 | 3 | 4 | 5 | 6
@@ -111,6 +116,8 @@ export const LegalNumberingExtension = Extension.create<LegalNumberingOptions>({
     return {
       enabled: true,
       styles: DEFAULT_LEGAL_NUMBERING,
+      numberingStyle: 'juridique' as NumberingStyleType,
+      startLevel: 2, // H2 = first numbered level
     }
   },
 
@@ -174,9 +181,7 @@ export const LegalNumberingExtension = Extension.create<LegalNumberingOptions>({
   },
 
   addProseMirrorPlugins() {
-    const { enabled, styles } = this.options
-
-    if (!enabled) return []
+    const fallbackStyles = this.options.styles
 
     return [
       new Plugin({
@@ -184,7 +189,12 @@ export const LegalNumberingExtension = Extension.create<LegalNumberingOptions>({
 
         props: {
           decorations(state) {
-            if (!enabled) return DecorationSet.empty
+            // Read settings dynamically from store
+            const { headingNumbering } = useSettingsStore.getState()
+            if (!headingNumbering.enabled) return DecorationSet.empty
+
+            const numberingStyle = headingNumbering.style
+            const startLevel = headingNumbering.startLevel + 1 // store startLevel 1 = H2
 
             const { doc } = state
             const decorations: Decoration[] = []
@@ -195,36 +205,56 @@ export const LegalNumberingExtension = Extension.create<LegalNumberingOptions>({
             doc.descendants((node, pos) => {
               if (node.type.name === 'heading') {
                 const headingLevel = node.attrs.level as number
-                const mappedLevel = headingLevel - 1 // H2 = niveau 1, etc.
+
+                // Skip headings above the startLevel
+                if (headingLevel < startLevel) return
+
+                const mappedLevel = headingLevel - startLevel + 1 // Relative level
 
                 if (mappedLevel >= 1 && mappedLevel <= 6) {
-                  const style = styles.find((s) => s.level === mappedLevel)
-                  if (style) {
-                    // Incrémenter le compteur
-                    counters[mappedLevel - 1]++
+                  // Incrémenter le compteur
+                  counters[mappedLevel - 1]++
 
-                    // Réinitialiser les niveaux inférieurs
-                    for (let i = mappedLevel; i < 6; i++) {
-                      counters[i] = 0
-                    }
-
-                    const number = formatNumber(counters[mappedLevel - 1], style)
-
-                    // Ajouter une décoration pour afficher le numéro
-                    decorations.push(
-                      Decoration.widget(pos + 1, () => {
-                        const span = document.createElement('span')
-                        span.className = 'legal-numbering'
-                        span.textContent = number + ' '
-                        span.style.cssText = `
-                          font-weight: bold;
-                          margin-right: 0.5em;
-                          color: var(--text-primary);
-                        `
-                        return span
-                      })
-                    )
+                  // Réinitialiser les niveaux inférieurs
+                  for (let i = mappedLevel; i < 6; i++) {
+                    counters[i] = 0
                   }
+
+                  let numberText: string
+
+                  if (numberingStyle === 'numeric') {
+                    // Hierarchical numeric: 1., 1.1., 1.1.1.
+                    const parts: number[] = []
+                    for (let i = 0; i < mappedLevel; i++) {
+                      if (counters[i] > 0) {
+                        parts.push(counters[i])
+                      }
+                    }
+                    numberText = parts.join('.') + '.'
+                  } else {
+                    // Juridique: use the style definitions
+                    const style = fallbackStyles.find((s) => s.level === mappedLevel)
+                    if (style) {
+                      numberText = formatNumber(counters[mappedLevel - 1], style)
+                    } else {
+                      numberText = counters[mappedLevel - 1] + '.'
+                    }
+                  }
+
+                  // Ajouter une décoration pour afficher le numéro
+                  decorations.push(
+                    Decoration.widget(pos + 1, () => {
+                      const span = document.createElement('span')
+                      span.className = 'legal-numbering'
+                      span.textContent = numberText + ' '
+                      span.style.cssText = `
+                        font-weight: bold;
+                        margin-right: 0.5em;
+                        color: var(--text-primary);
+                      `
+                      return span
+                    })
+                  )
                 }
               }
             })
