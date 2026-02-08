@@ -87,7 +87,7 @@
       }
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset:; font-src 'self' data:; connect-src 'self' ipc: tauri: http://localhost:1420 ws://localhost:1420"
     },
     "updater": {
       "active": false

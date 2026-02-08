@@ -42,10 +42,14 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_DEBUG,
 
     // Manual chunk splitting for optimization
+    // Note: react/react-dom grouped with tiptap/react to avoid circular dependency
     rollupOptions: {
       output: {
         manualChunks: {
-          'tiptap': [
+          'vendor': [
+            'react',
+            'react-dom',
+            'zustand',
             '@tiptap/react',
             '@tiptap/core',
             '@tiptap/starter-kit'
@@ -59,7 +63,6 @@ export default defineConfig({
             '@tiptap/extension-task-list',
             '@tiptap/extension-task-item'
           ],
-          'vendor': ['react', 'react-dom', 'zustand'],
           'pdfmake': ['pdfmake'],
           'docx': ['docx'],
         }

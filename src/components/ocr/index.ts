@@ -1,1 +1,0 @@
-export { OcrPanel } from './OcrPanel'

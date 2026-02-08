@@ -122,7 +122,6 @@ export function useImportDOCX() {
 
       // Logger les messages pour le débogage
       if (result.messages.length > 0) {
-        console.log('DOCX import messages:', result.messages)
       }
 
       if (errors.length > 0) {

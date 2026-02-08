@@ -961,10 +961,51 @@
   touch-action: pan-y pan-x;
 }
 
-/* Editable page highlight */
-.page-window-editable .page-window-inner,
-.page-window-active .page-window-inner {
+/* Editable page highlight (page mode only — not continuous) */
+.page-view-system .page-window-editable .page-window-inner,
+.page-view-system .page-window-active .page-window-inner {
   box-shadow: 0 0 0 2px var(--accent), 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ============================================
+   CONTINUOUS PAGE VIEW (Style Word Print Layout)
+   ============================================ */
+
+.continuous-page-sheet {
+  position: relative;
+  contain: layout style paint;
+  will-change: auto;
+  touch-action: pan-y pan-x;
+}
+
+.continuous-page-paper {
+  transition: box-shadow 0.15s ease;
+}
+
+.dark .continuous-page-paper {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Mirror content in continuous view */
+.continuous-page-mirror {
+  min-height: auto !important;
+  padding: 0 !important;
+}
+
+/* Page gap visual — subtle shadow at bottom of each page sheet */
+.continuous-page-sheet::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 4px;
+  right: 4px;
+  height: 4px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.03), transparent);
+  pointer-events: none;
+}
+
+.dark .continuous-page-sheet::after {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent);
 }
 
 /* ============================================
@@ -1501,6 +1542,24 @@
   flex-direction: column;
   padding: 8px 1rem;
   pointer-events: none;
+  /* Fond opaque pour masquer le texte derrière le séparateur */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--editor-bg, white) 15%,
+    var(--editor-bg, white) 85%,
+    transparent 100%
+  );
+}
+
+.dark .scroll-page-break-block {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--editor-bg, #111827) 15%,
+    var(--editor-bg, #111827) 85%,
+    transparent 100%
+  );
 }
 
 /* Footer/Header dans le mode scroll */
@@ -1559,36 +1618,46 @@
   text-align: right;
 }
 
-/* Separateur central */
+/* Separateur central — simule la coupure entre deux pages */
 .scroll-page-break-separator {
-  height: 24px;
-  margin: 6px 0;
+  height: 12px;
+  margin: 4px 0;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg-secondary, #e5e5e5);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.dark .scroll-page-break-separator {
+  background: #1f2937;
+  border-top-color: rgba(255, 255, 255, 0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.04);
 }
 
 .scroll-page-break-separator::before {
-  content: '';
-  position: absolute;
-  left: 2rem;
-  right: 2rem;
-  top: 50%;
-  border-top: 2px dashed var(--accent, #3b82f6);
-  opacity: 0.4;
+  content: none;
 }
 
 .scroll-page-break-page-label {
   position: relative;
-  padding: 0.15rem 0.5rem;
-  background: var(--accent, #3b82f6);
-  color: white;
-  font-size: 0.65rem;
-  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  background: var(--bg-secondary, #e5e5e5);
+  color: var(--text-secondary, #9ca3af);
+  font-size: 0.6rem;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .scroll-page-break-page-label {
+  background: #1f2937;
+  color: #6b7280;
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 /* Animation d'apparition */

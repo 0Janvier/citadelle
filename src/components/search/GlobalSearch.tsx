@@ -347,6 +347,14 @@ function extractTextFromContent(content: unknown): string {
   return text.trim()
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function highlightMatch(text: string, query: string): string {
   const maxLength = 150
   const lowerText = text.toLowerCase()
@@ -354,7 +362,7 @@ function highlightMatch(text: string, query: string): string {
   const index = lowerText.indexOf(lowerQuery)
 
   if (index === -1) {
-    return text.slice(0, maxLength) + (text.length > maxLength ? '...' : '')
+    return escapeHtml(text.slice(0, maxLength)) + (text.length > maxLength ? '...' : '')
   }
 
   const start = Math.max(0, index - 40)
@@ -364,9 +372,11 @@ function highlightMatch(text: string, query: string): string {
   if (start > 0) excerpt = '...' + excerpt
   if (end < text.length) excerpt = excerpt + '...'
 
-  // Surligner le match
-  const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
-  return excerpt.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-0.5 rounded">$1</mark>')
+  // Echapper le HTML AVANT d'inserer les balises <mark>
+  const escaped = escapeHtml(excerpt)
+  const escapedQuery = escapeHtml(query)
+  const regex = new RegExp(`(${escapeRegExp(escapedQuery)})`, 'gi')
+  return escaped.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-0.5 rounded">$1</mark>')
 }
 
 function escapeRegExp(string: string): string {

@@ -13,6 +13,8 @@ import { useDocumentStore } from '../../store/useDocumentStore'
 import { useEditorStore } from '../../store/useEditorStore'
 import { useStampStore } from '../../store/useStampStore'
 import { useToastStore } from '../../store/useToastStore'
+import { STAMP_STYLE_LABELS } from '../../lib/pdfStamper'
+import type { StampStyle } from '../../lib/pdfStamper'
 import { PIECE_NATURE_LABELS } from '../../types/legal'
 import type { PieceNature } from '../../types/legal'
 import { StampConfigDialog } from './StampConfigDialog'
@@ -47,18 +49,29 @@ export function PiecesSidebarPanel({ onClose }: PiecesSidebarPanelProps) {
   const stampAndCopyAll = useStampStore((s) => s.stampAndCopyAll)
   const setConfigDialogOpen = useStampStore((s) => s.setConfigDialogOpen)
 
+  // Stamp config for quick edit
+  const stampConfig = useStampStore((s) => s.config)
+  const setStampStyle = useStampStore((s) => s.setStyle)
+  const setStampPrefix = useStampStore((s) => s.setPrefix)
+  const setStampCabinetName = useStampStore((s) => s.setCabinetName)
+  const setStampAdditionalLine = useStampStore((s) => s.setAdditionalLine)
+  const recentCabinets = useStampStore((s) => s.recentCabinets)
+
   // Local UI state
   const [stampingFileId, setStampingFileId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState<string | null>(null) // filename being edited
   const [editingTitleValue, setEditingTitleValue] = useState('')
   const [expandedMeta, setExpandedMeta] = useState<string | null>(null) // filename with expanded metadata
   const [bordereauOpen, setBordereauOpen] = useState(false)
+  const [stampConfigExpanded, setStampConfigExpanded] = useState(false)
+  const [styleDropdownOpen, setStyleDropdownOpen] = useState(false)
 
   // Drag state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const styleDropdownRef = useRef<HTMLDivElement>(null)
 
   // Get current document's pieces state
   const documentState = activeDocumentId ? getDocumentState(activeDocumentId) : null
@@ -77,6 +90,18 @@ export function PiecesSidebarPanel({ onClose }: PiecesSidebarPanelProps) {
       titleInputRef.current.select()
     }
   }, [editingTitle])
+
+  // Close style dropdown on outside click
+  useEffect(() => {
+    if (!styleDropdownOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (styleDropdownRef.current && !styleDropdownRef.current.contains(e.target as Node)) {
+        setStyleDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [styleDropdownOpen])
 
   // Separate classified and unclassified files
   const { classifiedFiles, unclassifiedFiles } = useMemo(() => {
@@ -273,16 +298,6 @@ export function PiecesSidebarPanel({ onClose }: PiecesSidebarPanelProps) {
       <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
         <h2 className="text-lg font-semibold">Pieces justificatives</h2>
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => setConfigDialogOpen(true)}
-            title="Configuration du tampon"
-            className="p-1.5 rounded hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)] hover:text-[var(--accent)]"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
           {onClose && (
             <button
               onClick={onClose}
@@ -391,40 +406,145 @@ export function PiecesSidebarPanel({ onClose }: PiecesSidebarPanelProps) {
                 {/* ===== Classified pieces section ===== */}
                 {classifiedFiles.length > 0 && (
                   <div>
-                    <div className="px-4 py-2.5 bg-green-50 dark:bg-green-900/15 border-b border-[var(--border)] flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
-                          Pieces classees
-                        </span>
-                        <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
-                          {classifiedFiles.length}
-                        </span>
+                    <div className="px-4 py-2.5 bg-green-50 dark:bg-green-900/15 border-b border-[var(--border)]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide">
+                            Pieces classees
+                          </span>
+                          <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
+                            {classifiedFiles.length}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {/* Bordereau button */}
+                          <button
+                            onClick={() => setBordereauOpen(true)}
+                            disabled={classifiedFiles.length === 0}
+                            title="Generer le bordereau de communication"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+                              <rect x="9" y="3" width="6" height="4" rx="1" />
+                              <path d="M9 12h6M9 16h6" />
+                            </svg>
+                            Bordereau
+                          </button>
+                          {/* Stamp dropdown with style selector */}
+                          <div className="relative">
+                            <button
+                              onClick={handleStampAll}
+                              disabled={isStamping}
+                              title="Tamponner toutes les pieces classees"
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-l-md hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors disabled:opacity-50"
+                            >
+                              <StampIcon className="w-3.5 h-3.5" />
+                              {isStamping ? '...' : 'Tamponner'}
+                            </button>
+                          </div>
+                          {/* Style quick-select dropdown trigger */}
+                          <div className="relative" ref={styleDropdownRef}>
+                            <button
+                              onClick={() => setStyleDropdownOpen(!styleDropdownOpen)}
+                              className="flex items-center gap-0.5 px-1.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                              title={`Style: ${STAMP_STYLE_LABELS[stampConfig.style]}`}
+                            >
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                            </button>
+                            {/* Style dropdown */}
+                            {styleDropdownOpen && (
+                              <div className="absolute right-0 top-full mt-1 z-50 bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-xl p-2 w-48">
+                                <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide mb-1.5 px-1">Style du tampon</div>
+                                <div className="grid grid-cols-2 gap-1">
+                                  {(Object.entries(STAMP_STYLE_LABELS) as [StampStyle, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => { setStampStyle(key); setStyleDropdownOpen(false) }}
+                                      className={`px-2 py-1.5 text-xs rounded-md transition-colors text-left ${
+                                        stampConfig.style === key
+                                          ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium'
+                                          : 'hover:bg-[var(--bg-secondary)] text-[var(--text)]'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="border-t border-[var(--border)] mt-2 pt-1.5">
+                                  <button
+                                    onClick={() => { setStyleDropdownOpen(false); setConfigDialogOpen(true) }}
+                                    className="w-full text-left px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--bg-secondary)] rounded-md transition-colors"
+                                  >
+                                    Options avancees...
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {/* Bordereau button */}
+                      {/* Collapsible stamp config section */}
+                      <div className="mt-1.5">
                         <button
-                          onClick={() => setBordereauOpen(true)}
-                          disabled={classifiedFiles.length === 0}
-                          title="Generer le bordereau de communication"
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50"
+                          onClick={() => setStampConfigExpanded(!stampConfigExpanded)}
+                          className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
                         >
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-                            <rect x="9" y="3" width="6" height="4" rx="1" />
-                            <path d="M9 12h6M9 16h6" />
-                          </svg>
-                          Bordereau
+                          <svg className={`w-3 h-3 transition-transform ${stampConfigExpanded ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                          <StampIcon className="w-3 h-3" />
+                          <span>Config tampon</span>
+                          <span className="opacity-60 ml-1">{STAMP_STYLE_LABELS[stampConfig.style]} — {stampConfig.cabinetName || 'Sans nom'}</span>
                         </button>
-                        {/* Batch stamp button */}
-                        <button
-                          onClick={handleStampAll}
-                          disabled={isStamping}
-                          title="Tamponner toutes les pieces classees"
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors disabled:opacity-50"
-                        >
-                          <StampIcon className="w-3.5 h-3.5" />
-                          {isStamping ? 'Tamponnage...' : 'Tamponner'}
-                        </button>
+                        {stampConfigExpanded && (
+                          <div className="mt-2 space-y-2 bg-[var(--bg)] rounded-lg border border-[var(--border)] p-2.5">
+                            {/* Prefix */}
+                            <div>
+                              <label className="block text-[10px] text-[var(--text-secondary)] uppercase tracking-wide mb-0.5">Prefixe</label>
+                              <input
+                                type="text"
+                                value={stampConfig.prefix}
+                                onChange={(e) => setStampPrefix(e.target.value)}
+                                placeholder="Piece n°"
+                                className="w-full text-xs px-2 py-1 border border-[var(--border)] rounded bg-[var(--bg-secondary)] text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                              />
+                            </div>
+                            {/* Cabinet name */}
+                            <div>
+                              <label className="block text-[10px] text-[var(--text-secondary)] uppercase tracking-wide mb-0.5">Nom du cabinet</label>
+                              <input
+                                type="text"
+                                value={stampConfig.cabinetName}
+                                onChange={(e) => setStampCabinetName(e.target.value)}
+                                placeholder="Cabinet X"
+                                list="recent-cabinets"
+                                className="w-full text-xs px-2 py-1 border border-[var(--border)] rounded bg-[var(--bg-secondary)] text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                              />
+                              {recentCabinets.length > 0 && (
+                                <datalist id="recent-cabinets">
+                                  {recentCabinets.map((c) => <option key={c} value={c} />)}
+                                </datalist>
+                              )}
+                            </div>
+                            {/* Additional line */}
+                            <div>
+                              <label className="block text-[10px] text-[var(--text-secondary)] uppercase tracking-wide mb-0.5">Ligne additionnelle</label>
+                              <input
+                                type="text"
+                                value={stampConfig.additionalLine || ''}
+                                onChange={(e) => setStampAdditionalLine(e.target.value)}
+                                placeholder="(optionnel)"
+                                className="w-full text-xs px-2 py-1 border border-[var(--border)] rounded bg-[var(--bg-secondary)] text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                              />
+                            </div>
+                            {/* Advanced button */}
+                            <button
+                              onClick={() => { setStampConfigExpanded(false); setConfigDialogOpen(true) }}
+                              className="text-[10px] text-[var(--accent)] hover:underline"
+                            >
+                              Options avancees...
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -472,16 +592,39 @@ export function PiecesSidebarPanel({ onClose }: PiecesSidebarPanelProps) {
                             } ${isDragOver ? 'border-t-2 border-t-[var(--accent)]' : 'border-t-2 border-t-transparent'
                             } hover:bg-[var(--bg-secondary)]`}
                           >
-                            {/* Drag handle */}
-                            <div className="flex-shrink-0 mt-1.5 cursor-grab active:cursor-grabbing text-[var(--text-secondary)] opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity">
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                <circle cx="9" cy="6" r="2" />
-                                <circle cx="15" cy="6" r="2" />
-                                <circle cx="9" cy="12" r="2" />
-                                <circle cx="15" cy="12" r="2" />
-                                <circle cx="9" cy="18" r="2" />
-                                <circle cx="15" cy="18" r="2" />
-                              </svg>
+                            {/* Drag handle + up/down buttons */}
+                            <div className="flex-shrink-0 flex flex-col items-center gap-0 mt-0.5">
+                              {/* Move up */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (activeDocumentId && index > 0) reorderPieces(activeDocumentId, index, index - 1) }}
+                                disabled={index === 0 || isRenaming}
+                                className={`p-0 w-4 h-3 flex items-center justify-center rounded-sm transition-colors ${
+                                  index === 0 ? 'opacity-0' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-[var(--accent)]'
+                                } text-[var(--text-secondary)]`}
+                                title="Monter"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+                              </button>
+                              {/* Drag handle (always visible) */}
+                              <div className="cursor-grab active:cursor-grabbing text-[var(--text-secondary)] opacity-30 group-hover:opacity-60 hover:!opacity-100 transition-opacity">
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                  <circle cx="9" cy="8" r="1.5" />
+                                  <circle cx="15" cy="8" r="1.5" />
+                                  <circle cx="9" cy="16" r="1.5" />
+                                  <circle cx="15" cy="16" r="1.5" />
+                                </svg>
+                              </div>
+                              {/* Move down */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (activeDocumentId && index < classifiedFiles.length - 1) reorderPieces(activeDocumentId, index, index + 1) }}
+                                disabled={index === classifiedFiles.length - 1 || isRenaming}
+                                className={`p-0 w-4 h-3 flex items-center justify-center rounded-sm transition-colors ${
+                                  index === classifiedFiles.length - 1 ? 'opacity-0' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-[var(--accent)]'
+                                } text-[var(--text-secondary)]`}
+                                title="Descendre"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                              </button>
                             </div>
 
                             {/* Piece number badge */}

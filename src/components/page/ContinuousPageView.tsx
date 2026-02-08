@@ -1,18 +1,27 @@
 /**
- * Mode de vue continu avec séparateurs de pages visuels
+ * Vue continue style Word (Print Layout)
  *
- * Affiche le document comme un flux continu (un seul EditorContent)
- * avec des séparateurs visuels aux positions de saut de page.
- * Similaire au mode "Mise en page" de Word mais avec scroll fluide.
+ * Affiche le document comme des feuilles A4 empilées verticalement
+ * avec un fond gris entre les pages, exactement comme le mode
+ * « Mise en page » de Microsoft Word.
+ *
+ * Architecture : UN SEUL éditeur monté sur la page active.
+ * Les autres pages affichent un contenu miroir (innerHTML).
+ * La page active suit automatiquement le curseur et le scroll.
  */
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { EditorContent, type Editor } from '@tiptap/react'
 import { usePageStore } from '../../store/usePageStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
-import { PageBreakSeparator } from './PageBreakSeparator'
+import { useSettingsStore } from '../../store/useSettingsStore'
+import { PageHeader } from './PageHeader'
+import { PageFooter } from './PageFooter'
 import { PageStatusBar } from './PageStatusBar'
 import { LetterheadOverlay } from '../LetterheadOverlay'
+
+/** Espace gris entre les pages (px) — similaire à Word */
+const PAGE_GAP = 8
 
 interface ContinuousPageViewProps {
   documentId: string
@@ -22,13 +31,31 @@ interface ContinuousPageViewProps {
 export function ContinuousPageView({ documentId, editor }: ContinuousPageViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorWrapperRef = useRef<HTMLDivElement>(null)
+  const activePageRef = useRef(0)
+  const isAutoScrollingRef = useRef(false)
+  const scrollIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Document state
+  const [editorHeight, setEditorHeight] = useState(0)
+  const [activePageIndex, setActivePageIndex] = useState(0)
+  const [contentHtml, setContentHtml] = useState('')
+  const [currentPageDisplay, setCurrentPageDisplay] = useState(1)
+
+  // Keep ref in sync with state
+  useEffect(() => { activePageRef.current = activePageIndex }, [activePageIndex])
+
+  // Document
   const document = useDocumentStore((state) =>
     state.documents.find((doc) => doc.id === documentId)
   )
 
-  // Page store state
+  // Settings for mirror content styling consistency
+  const fontSize = useSettingsStore((state) => state.fontSize)
+  const fontFamily = useSettingsStore((state) => state.fontFamily)
+  const lineHeight = useSettingsStore((state) => state.lineHeight)
+  const paragraphIndent = useSettingsStore((state) => state.paragraphIndent)
+  const paragraphSpacing = useSettingsStore((state) => state.paragraphSpacing)
+
+  // Page store
   const getPageDimensions = usePageStore((state) => state.getPageDimensions)
   const getContentHeight = usePageStore((state) => state.getContentHeight)
   const margins = usePageStore((state) => state.margins)
@@ -38,67 +65,70 @@ export function ContinuousPageView({ documentId, editor }: ContinuousPageViewPro
   const setPagesPerRow = usePageStore((state) => state.setPagesPerRow)
   const setCurrentPage = usePageStore((state) => state.setCurrentPage)
   const setTotalPages = usePageStore((state) => state.setTotalPages)
+  const headerEnabled = usePageStore((state) => state.headerEnabled)
+  const headerHeight = usePageStore((state) => state.headerHeight)
+  const headerContent = usePageStore((state) => state.headerContent)
+  const footerEnabled = usePageStore((state) => state.footerEnabled)
+  const footerHeight = usePageStore((state) => state.footerHeight)
+  const footerContent = usePageStore((state) => state.footerContent)
 
-  // Local state
-  const [currentPageDisplay, setCurrentPageDisplay] = useState(1)
-  const [editorHeight, setEditorHeight] = useState(0)
-
-  // Calculate dimensions
-  const { width: pageWidth } = getPageDimensions()
-  const contentHeight = getContentHeight()
+  // Dimensions
+  const { width: pageWidth, height: pageHeight } = getPageDimensions()
+  const pageContentHeight = getContentHeight()
   const contentWidth = pageWidth - margins.left - margins.right
+  const effectiveHeaderHeight = headerEnabled ? headerHeight : 0
+  const effectiveFooterHeight = footerEnabled ? footerHeight : 0
+  const availableContentHeight = pageContentHeight - effectiveHeaderHeight - effectiveFooterHeight
 
-  // Calculate total pages based on editor height
+  // Total pages
   const totalPages = useMemo(() => {
-    if (editorHeight <= 0 || contentHeight <= 0) return 1
-    return Math.max(1, Math.ceil(editorHeight / contentHeight))
-  }, [editorHeight, contentHeight])
+    if (editorHeight <= 0 || availableContentHeight <= 0) return 1
+    return Math.max(1, Math.ceil(editorHeight / availableContentHeight))
+  }, [editorHeight, availableContentHeight])
 
-  // Calculate page break positions
-  const pageBreakPositions = useMemo(() => {
-    const positions: number[] = []
-    for (let i = 1; i < totalPages; i++) {
-      positions.push(i * contentHeight)
-    }
-    return positions
-  }, [totalPages, contentHeight])
-
-  // Update store when total pages change
+  // Sync total pages to store
   useEffect(() => {
     setTotalPages(totalPages)
   }, [totalPages, setTotalPages])
 
-  // Observer la hauteur de l'éditeur
+  // ========================================================================
+  // Observe editor height + mirror content snapshot
+  // ========================================================================
   useEffect(() => {
     if (!editor) return
 
     let resizeObserver: ResizeObserver | null = null
     let rafId: number | null = null
 
-    const updateHeight = () => {
+    const updateState = () => {
       const editorDom = editor.view?.dom as HTMLElement
       if (editorDom) {
         const height = editorDom.scrollHeight || editorDom.offsetHeight
-        if (height > 0 && height !== editorHeight) {
-          setEditorHeight(height)
-        }
+        if (height > 0) setEditorHeight(height)
+        const html = editorDom.innerHTML
+        if (html) setContentHtml(html)
       }
     }
 
     const throttledUpdate = () => {
       if (rafId) return
       rafId = requestAnimationFrame(() => {
-        updateHeight()
+        updateState()
         rafId = null
       })
     }
 
-    // Initial update
-    if (editor.view?.dom) {
-      updateHeight()
-      resizeObserver = new ResizeObserver(throttledUpdate)
-      resizeObserver.observe(editor.view.dom)
+    const initObserver = () => {
+      const editorDom = editor.view?.dom as HTMLElement
+      if (editorDom) {
+        updateState()
+        resizeObserver = new ResizeObserver(throttledUpdate)
+        resizeObserver.observe(editorDom)
+      }
     }
+
+    if (editor.view?.dom) initObserver()
+    else rafId = requestAnimationFrame(initObserver)
 
     editor.on('update', throttledUpdate)
 
@@ -107,33 +137,148 @@ export function ContinuousPageView({ documentId, editor }: ContinuousPageViewPro
       editor.off('update', throttledUpdate)
       resizeObserver?.disconnect()
     }
-  }, [editor, editorHeight])
+  }, [editor])
 
-  // Track current page based on scroll position
+  // ========================================================================
+  // Scroll tracking + debounced active-page switch
+  // ========================================================================
+  const scaledPageHeight = pageHeight * pageZoom
+  const rowHeight = scaledPageHeight + PAGE_GAP
+
   const handleScroll = useCallback(() => {
-    if (!containerRef.current || contentHeight <= 0) return
+    if (!containerRef.current) return
 
     const scrollTop = containerRef.current.scrollTop
-    const currentPage = Math.floor(scrollTop / contentHeight) + 1
-    const clampedPage = Math.max(1, Math.min(currentPage, totalPages))
+    const adjustedScroll = Math.max(0, scrollTop - 24)
+    const pageIndex = Math.floor(adjustedScroll / rowHeight)
+    const clampedPage = Math.max(0, Math.min(pageIndex, totalPages - 1))
 
-    if (clampedPage !== currentPageDisplay) {
-      setCurrentPageDisplay(clampedPage)
-      setCurrentPage(clampedPage)
+    if (clampedPage + 1 !== currentPageDisplay) {
+      setCurrentPageDisplay(clampedPage + 1)
+      setCurrentPage(clampedPage + 1)
     }
-  }, [contentHeight, totalPages, currentPageDisplay, setCurrentPage])
 
-  // Navigate to a specific page
+    // Skip auto-switch during programmatic scroll
+    if (isAutoScrollingRef.current) return
+
+    // After scroll stops, activate the page closest to viewport center
+    if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current)
+    scrollIdleTimerRef.current = setTimeout(() => {
+      if (!containerRef.current || isAutoScrollingRef.current) return
+      const st = containerRef.current.scrollTop
+      const vh = containerRef.current.clientHeight
+      const centerY = st + vh / 2
+      const centerPage = Math.max(0, Math.min(
+        Math.floor((centerY - 24) / rowHeight),
+        totalPages - 1
+      ))
+
+      if (centerPage !== activePageRef.current) {
+        setActivePageIndex(centerPage)
+      }
+    }, 200)
+  }, [rowHeight, totalPages, currentPageDisplay, setCurrentPage])
+
+  // ========================================================================
+  // Navigate to a specific page (smooth scroll)
+  // ========================================================================
   const scrollToPage = useCallback((pageNumber: number) => {
     if (!containerRef.current || pageNumber < 1 || pageNumber > totalPages) return
 
-    const targetScroll = (pageNumber - 1) * contentHeight
-    containerRef.current.scrollTo({
-      top: targetScroll,
-      behavior: 'smooth',
-    })
-  }, [totalPages, contentHeight])
+    isAutoScrollingRef.current = true
+    const targetScroll = 24 + (pageNumber - 1) * rowHeight
+    containerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' })
 
+    setCurrentPageDisplay(pageNumber)
+    setCurrentPage(pageNumber)
+
+    setTimeout(() => { isAutoScrollingRef.current = false }, 500)
+  }, [totalPages, rowHeight, setCurrentPage])
+
+  // ========================================================================
+  // Auto-switch active page based on cursor position (typing across pages)
+  // ========================================================================
+  useEffect(() => {
+    if (!editor) return
+
+    const handleSelectionUpdate = () => {
+      if (!editorWrapperRef.current) return
+      try {
+        const { head } = editor.state.selection
+        const coords = editor.view.coordsAtPos(head)
+        const wrapperRect = editorWrapperRef.current.getBoundingClientRect()
+        const cursorInWrapper = coords.top - wrapperRect.top
+        const cursorInContent = cursorInWrapper + activePageRef.current * availableContentHeight
+        const targetPage = Math.max(0, Math.min(
+          Math.floor(cursorInContent / availableContentHeight),
+          totalPages - 1
+        ))
+
+        if (targetPage !== activePageRef.current) {
+          setActivePageIndex(targetPage)
+          scrollToPage(targetPage + 1)
+        }
+      } catch {
+        // coordsAtPos can throw for some edge cases
+      }
+    }
+
+    editor.on('selectionUpdate', handleSelectionUpdate)
+    return () => { editor.off('selectionUpdate', handleSelectionUpdate) }
+  }, [editor, availableContentHeight, totalPages, scrollToPage])
+
+  // ========================================================================
+  // Click on non-active page → activate + position cursor
+  // ========================================================================
+  const handlePageClick = useCallback((pageIndex: number, event: React.MouseEvent) => {
+    if (pageIndex === activePageRef.current) return
+
+    const clickX = event.clientX
+    const clickY = event.clientY
+
+    setActivePageIndex(pageIndex)
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (!editor) return
+        try {
+          const pos = editor.view.posAtCoords({ left: clickX, top: clickY })
+          if (pos) editor.commands.setTextSelection(pos.pos)
+        } catch { /* fallback: focus only */ }
+        editor.commands.focus()
+      }, 30)
+    })
+  }, [editor])
+
+  // ========================================================================
+  // Cleanup
+  // ========================================================================
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current)
+    }
+  }, [])
+
+  // ========================================================================
+  // Derived data
+  // ========================================================================
+  const pageIndices = useMemo(() =>
+    Array.from({ length: totalPages }, (_, i) => i),
+    [totalPages]
+  )
+
+  // Inline styles for mirror content to match editor appearance
+  const mirrorStyle = useMemo(() => ({
+    fontSize: `${fontSize}px`,
+    fontFamily,
+    lineHeight: String(lineHeight),
+    '--paragraph-indent': `${paragraphIndent}cm`,
+    '--paragraph-spacing': `${paragraphSpacing}em`,
+  } as React.CSSProperties), [fontSize, fontFamily, lineHeight, paragraphIndent, paragraphSpacing])
+
+  // ========================================================================
+  // Render
+  // ========================================================================
   if (!editor || !document) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--text-secondary)]">
@@ -145,79 +290,167 @@ export function ContinuousPageView({ documentId, editor }: ContinuousPageViewPro
   return (
     <div
       className="continuous-page-view flex-1 flex flex-col overflow-hidden"
-      style={{ background: 'var(--bg-secondary, #f5f5f5)' }}
+      style={{ position: 'relative' }}
     >
       {/* Zone de scroll principale */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto"
+        className="page-view-container"
         onScroll={handleScroll}
         style={{
-          scrollBehavior: 'smooth',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 32,
+          overflow: 'auto',
         }}
       >
-        {/* Conteneur centré simulant une page */}
+        {/* Pile verticale de pages centrées */}
         <div
+          className="continuous-page-stack"
           style={{
-            maxWidth: pageWidth * pageZoom,
-            margin: '32px auto',
-            padding: `${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px`,
-            background: 'var(--editor-bg, white)',
-            boxShadow: '0 2px 12px rgba(0, 0, 0, 0.1)',
-            borderRadius: '4px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '24px 24px 64px',
+            gap: `${PAGE_GAP}px`,
             minHeight: '100%',
-            position: 'relative',
           }}
         >
-          {/* Cartouche cabinet */}
-          <LetterheadOverlay />
+          {pageIndices.map((pageIndex) => {
+            const isActive = pageIndex === activePageIndex
+            const clipTop = pageIndex * availableContentHeight
 
-          {/* Éditeur */}
-          <div
-            ref={editorWrapperRef}
-            style={{
-              width: contentWidth * pageZoom,
-              position: 'relative',
-            }}
-          >
-            <EditorContent
-              editor={editor}
-              className="continuous-editor-content"
-            />
-
-            {/* Séparateurs de pages superposés */}
-            {pageBreakPositions.map((position, index) => (
+            return (
               <div
-                key={index}
+                key={pageIndex}
+                className="continuous-page-sheet"
                 style={{
-                  position: 'absolute',
-                  left: -margins.left,
-                  right: -margins.right,
-                  top: position * pageZoom,
-                  zIndex: 10,
+                  width: pageWidth * pageZoom,
+                  height: pageHeight * pageZoom,
+                  flexShrink: 0,
+                  cursor: isActive ? 'text' : 'pointer',
                 }}
+                onClick={!isActive ? (e) => handlePageClick(pageIndex, e) : undefined}
               >
-                <PageBreakSeparator
-                  pageNumber={index + 2}
-                  totalPages={totalPages}
-                  documentTitle={document.title}
-                />
+                {/* Feuille de papier (dimensions réelles, zoom via transform) */}
+                <div
+                  className="continuous-page-paper"
+                  style={{
+                    width: pageWidth,
+                    height: pageHeight,
+                    transform: pageZoom !== 1 ? `scale(${pageZoom})` : undefined,
+                    transformOrigin: 'top left',
+                    background: 'var(--editor-bg, white)',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Zone de contenu avec marges */}
+                  <div
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: `${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px`,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {/* En-tête */}
+                    {headerEnabled && (
+                      <PageHeader
+                        content={headerContent}
+                        pageNumber={pageIndex + 1}
+                        totalPages={totalPages}
+                        documentTitle={document.title}
+                        height={effectiveHeaderHeight}
+                        margins={{ left: 0, right: 0 }}
+                      />
+                    )}
+
+                    {/* Cartouche cabinet (première page uniquement) */}
+                    {pageIndex === 0 && <LetterheadOverlay />}
+
+                    {/* Viewport de contenu (clippé) */}
+                    <div
+                      data-content-viewport
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        position: 'relative',
+                      }}
+                    >
+                      {/* Contenu miroir (affiché quand la page n'est PAS active) */}
+                      <div
+                        className="ProseMirror prose prose-lg dark:prose-invert max-w-none continuous-page-mirror"
+                        style={{
+                          position: 'absolute',
+                          top: -clipTop,
+                          left: 0,
+                          width: contentWidth,
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                          visibility: isActive ? 'hidden' : 'visible',
+                          minHeight: 'auto',
+                          padding: 0,
+                          ...mirrorStyle,
+                        }}
+                        dangerouslySetInnerHTML={{ __html: contentHtml }}
+                      />
+
+                      {/* Éditeur réel (uniquement sur la page active) */}
+                      {isActive && (
+                        <div
+                          ref={editorWrapperRef}
+                          style={{
+                            position: 'absolute',
+                            top: -clipTop,
+                            left: 0,
+                            width: contentWidth,
+                          }}
+                        >
+                          <EditorContent
+                            editor={editor}
+                            className="page-editor-content"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pied de page */}
+                    {footerEnabled && (
+                      <PageFooter
+                        content={footerContent}
+                        pageNumber={pageIndex + 1}
+                        totalPages={totalPages}
+                        documentTitle={document.title}
+                        height={effectiveFooterHeight}
+                        margins={{ left: 0, right: 0 }}
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
+            )
+          })}
         </div>
       </div>
 
       {/* Barre de statut */}
-      <PageStatusBar
-        currentPage={currentPageDisplay}
-        totalPages={totalPages}
-        onNavigate={scrollToPage}
-        zoom={pageZoom}
-        onZoomChange={setPageZoom}
-        pagesPerRow={pagesPerRow}
-        onPagesPerRowChange={setPagesPerRow}
-      />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+        <PageStatusBar
+          currentPage={currentPageDisplay}
+          totalPages={totalPages}
+          onNavigate={scrollToPage}
+          zoom={pageZoom}
+          onZoomChange={setPageZoom}
+          pagesPerRow={pagesPerRow}
+          onPagesPerRowChange={setPagesPerRow}
+        />
+      </div>
     </div>
   )
 }

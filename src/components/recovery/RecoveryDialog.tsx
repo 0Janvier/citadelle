@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { AlertTriangle, Clock, RotateCcw, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Clock, RotateCcw, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { BackupManager, type Backup } from '../../lib/backupManager'
 import { useDocumentStore } from '../../store/useDocumentStore'
 
@@ -116,133 +116,116 @@ export function RecoveryDialog() {
 
   return (
     <div
-      className={`fixed top-[88px] left-0 right-0 z-40 ${isClosing ? 'recovery-banner-exit' : 'recovery-banner-enter'}`}
+      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-40 ${isClosing ? 'recovery-banner-exit' : 'recovery-banner-enter'}`}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => {
         setIsPaused(false)
         lastTickRef.current = Date.now()
       }}
     >
-      <div className="mx-auto max-w-4xl px-4">
-        <div className="bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/50 rounded-lg shadow-lg overflow-hidden">
-          {/* Progress bar */}
-          <div className="h-0.5 bg-amber-100 dark:bg-amber-900/30">
+      {/* Single backup: compact toast */}
+      {singleBackup ? (
+        <div className="flex items-center gap-2.5 px-3 py-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-md text-xs">
+          {/* Progress indicator */}
+          <div className="w-1 h-4 rounded-full bg-amber-200 dark:bg-amber-900/40 overflow-hidden shrink-0">
             <div
-              className="h-full bg-amber-400 dark:bg-amber-600 transition-none"
-              style={{ width: `${progress}%` }}
+              className="w-full bg-amber-500 dark:bg-amber-500 transition-none rounded-full"
+              style={{ height: `${progress}%` }}
             />
           </div>
-
-          {/* Single backup: compact one-liner */}
-          {singleBackup ? (
-            <div className="flex items-center gap-3 px-4 py-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span className="text-sm text-[var(--text)]">
-                Version plus récente de{' '}
-                <strong>{singleBackup.title}</strong>
-                <span className="text-[var(--text-secondary)] ml-1.5">
-                  ({new Date(singleBackup.timestamp).toLocaleString('fr-FR', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })})
-                </span>
-              </span>
-              <div className="ml-auto flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleRestore(singleBackup)}
-                  className="flex items-center gap-1.5 px-3 py-1 text-sm font-medium bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Restaurer
-                </button>
-                <button
-                  onClick={() => handleDismiss(singleBackup.id)}
-                  className="p-1.5 text-[var(--text-secondary)] rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                  title="Ignorer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+          <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+          <span className="text-[var(--text-secondary)]">
+            Backup de <strong className="text-[var(--text)] font-medium">{singleBackup.title}</strong>
+            <span className="ml-1 opacity-60">
+              {new Date(singleBackup.timestamp).toLocaleString('fr-FR', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+          </span>
+          <button
+            onClick={() => handleRestore(singleBackup)}
+            className="ml-1 flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Restaurer
+          </button>
+          <button
+            onClick={() => handleDismiss(singleBackup.id)}
+            className="p-0.5 text-[var(--text-secondary)] rounded hover:bg-[var(--bg-secondary)] transition-colors"
+            title="Ignorer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ) : (
+        /* Multiple backups: compact expandable */
+        <div className="bg-[var(--bg)] border border-[var(--border)] rounded-lg shadow-md overflow-hidden">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 text-xs">
+            <div className="w-1 h-4 rounded-full bg-amber-200 dark:bg-amber-900/40 overflow-hidden shrink-0">
+              <div
+                className="w-full bg-amber-500 dark:bg-amber-500 transition-none rounded-full"
+                style={{ height: `${progress}%` }}
+              />
             </div>
-          ) : (
-            /* Multiple backups: summary + expandable list */
-            <>
-              <div className="flex items-center gap-3 px-4 py-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span className="text-sm text-[var(--text)]">
-                  <strong>{backups.length} documents</strong> ont des versions récupérables
-                </span>
-                <div className="ml-auto flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => setExpanded(!expanded)}
-                    className="flex items-center gap-1.5 px-3 py-1 text-sm font-medium border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                  >
-                    {expanded ? (
-                      <>
-                        <ChevronUp className="w-3.5 h-3.5" />
-                        Masquer
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                        Voir
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={closeWithAnimation}
-                    className="p-1.5 text-[var(--text-secondary)] rounded-md hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                    title="Tout ignorer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+            <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+            <span className="text-[var(--text-secondary)]">
+              <strong className="text-[var(--text)] font-medium">{backups.length} backups</strong> récupérables
+            </span>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="ml-1 flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+            >
+              {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+              {expanded ? 'Masquer' : 'Voir'}
+            </button>
+            <button
+              onClick={closeWithAnimation}
+              className="p-0.5 text-[var(--text-secondary)] rounded hover:bg-[var(--bg-secondary)] transition-colors"
+              title="Tout ignorer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-              {/* Expanded backup list */}
-              {expanded && (
-                <div className="border-t border-amber-200 dark:border-amber-800/50 px-4 py-2 space-y-2 max-h-[200px] overflow-y-auto">
-                  {backups.map((backup) => (
-                    <div
-                      key={backup.id}
-                      className="flex items-center gap-3 py-1.5"
+          {/* Expanded backup list */}
+          {expanded && (
+            <div className="border-t border-[var(--border)] px-3 py-1.5 space-y-1 max-h-[160px] overflow-y-auto">
+              {backups.map((backup) => (
+                <div key={backup.id} className="flex items-center gap-2 py-1 text-xs">
+                  <span className="text-[var(--text-secondary)] shrink-0">
+                    {new Date(backup.timestamp).toLocaleString('fr-FR', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <span className="font-medium truncate text-[var(--text)]">{backup.title}</span>
+                  <div className="ml-auto flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleRestore(backup)}
+                      className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                     >
-                      <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] shrink-0">
-                        <Clock className="w-3 h-3" />
-                        {new Date(backup.timestamp).toLocaleString('fr-FR', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
-                      <span className="text-sm font-medium truncate">{backup.title}</span>
-                      <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleRestore(backup)}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          Restaurer
-                        </button>
-                        <button
-                          onClick={() => handleDismiss(backup.id)}
-                          className="p-1 text-[var(--text-secondary)] rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
-                          title="Ignorer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                      <RotateCcw className="w-3 h-3" />
+                      Restaurer
+                    </button>
+                    <button
+                      onClick={() => handleDismiss(backup.id)}
+                      className="p-0.5 text-[var(--text-secondary)] rounded hover:bg-[var(--bg-secondary)] transition-colors"
+                      title="Ignorer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-              )}
-            </>
+              ))}
+            </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

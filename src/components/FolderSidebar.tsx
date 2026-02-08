@@ -561,21 +561,25 @@ function FolderTree({
               <span className="text-sm truncate">{item.name}</span>
             </div>
 
-            {item.type === 'folder' && isExpanded && item.children && item.children.length > 0 && (
-              <FolderTree
-                items={item.children}
-                expandedFolders={expandedFolders}
-                selectedItemId={selectedItemId}
-                focusedItemId={focusedItemId}
-                dragOverId={dragOverId}
-                isSidebarFocused={isSidebarFocused}
-                onItemClick={onItemClick}
-                onDragStart={onDragStart}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
-                depth={depth + 1}
-              />
+            {item.type === 'folder' && item.children && item.children.length > 0 && (
+              <div className="folder-children" data-expanded={isExpanded}>
+                <div>
+                  <FolderTree
+                    items={item.children}
+                    expandedFolders={expandedFolders}
+                    selectedItemId={selectedItemId}
+                    focusedItemId={focusedItemId}
+                    dragOverId={dragOverId}
+                    isSidebarFocused={isSidebarFocused}
+                    onItemClick={onItemClick}
+                    onDragStart={onDragStart}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    depth={depth + 1}
+                  />
+                </div>
+              </div>
             )}
           </div>
         )

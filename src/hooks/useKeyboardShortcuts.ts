@@ -418,6 +418,20 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      // Cmd/Ctrl + Shift + [ / ]: Previous / Next tab (VS Code style)
+      if (cmdOrCtrl && e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        e.preventDefault()
+        const currentIndex = st.documents.findIndex((doc) => doc.id === st.activeDocumentId)
+        if (e.code === 'BracketLeft') {
+          const prevIndex = (currentIndex - 1 + st.documents.length) % st.documents.length
+          if (st.documents[prevIndex]) cb.setActiveDocument(st.documents[prevIndex].id)
+        } else {
+          const nextIndex = (currentIndex + 1) % st.documents.length
+          if (st.documents[nextIndex]) cb.setActiveDocument(st.documents[nextIndex].id)
+        }
+        return
+      }
+
       // Cmd/Ctrl + 1-9: Go to tab N
       if (cmdOrCtrl && /^[1-9]$/.test(e.key)) {
         e.preventDefault()

@@ -27,7 +27,6 @@ export const pdfFontsConfig = {
  * Charge les polices Garamond et les enregistre dans pdfmake
  */
 export async function loadGaramondFonts(pdfMake: any): Promise<void> {
-  console.log('Loading Garamond fonts from pre-built VFS...')
 
   try {
     // Enregistrer le VFS Garamond dans pdfmake
@@ -43,13 +42,11 @@ export async function loadGaramondFonts(pdfMake: any): Promise<void> {
       ...garamondFonts,
     }
 
-    console.log('Garamond fonts loaded successfully from VFS')
 
     // Vérifier que les fonts sont bien enregistrées
     if (pdfMake.virtualfs && typeof pdfMake.virtualfs.readFileSync === 'function') {
       try {
-        const testRead = pdfMake.virtualfs.readFileSync('EBGaramond-Regular.ttf')
-        console.log('Garamond font verification:', testRead ? 'OK' : 'FAILED')
+        pdfMake.virtualfs.readFileSync('EBGaramond-Regular.ttf')
       } catch (e) {
         console.warn('Garamond font verification failed:', e)
       }

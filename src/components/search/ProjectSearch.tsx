@@ -171,10 +171,23 @@ export function ProjectSearch({ isOpen, onClose }: ProjectSearchProps) {
   }
 
   const highlightMatch = (text: string) => {
-    if (!query.trim()) return text
+    // Echapper le HTML pour prevenir les XSS
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
 
-    const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
-    return text.replace(
+    if (!query.trim()) return escaped
+
+    const escapedQuery = query
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+    const regex = new RegExp(`(${escapeRegExp(escapedQuery)})`, 'gi')
+    return escaped.replace(
       regex,
       '<mark class="bg-yellow-200 dark:bg-yellow-700/50 px-0.5 rounded">$1</mark>'
     )

@@ -307,7 +307,6 @@ export function useNativeMenuEvents() {
           break
 
         default:
-          console.log('Unhandled menu event:', menuId)
       }
     })
 

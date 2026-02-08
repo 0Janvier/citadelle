@@ -54,15 +54,12 @@ async function initializePdfMake(): Promise<boolean> {
   }
 
   try {
-    console.log('=== PDF Export: Initializing pdfmake ===')
 
     // APPROCHE: Charger pdfmake d'abord, puis exposer globalement, puis charger vfs_fonts
     // Cela permet à vfs_fonts de s'auto-enregistrer via le global
 
     // Étape 1: Importer pdfmake
     const pdfMakeModule = await import('pdfmake/build/pdfmake')
-    console.log('Step 1: pdfmake module loaded')
-    console.log('  - Module keys:', Object.keys(pdfMakeModule).slice(0, 10))
 
     // Extraire l'instance pdfMake
     pdfMake = pdfMakeModule.default || pdfMakeModule
@@ -75,26 +72,17 @@ async function initializePdfMake(): Promise<boolean> {
     const globalObj = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : {}) as any
     globalObj.pdfMake = pdfMake
 
-    console.log('Step 2: pdfMake exposed globally')
-    console.log('  - typeof pdfMake.createPdf:', typeof pdfMake?.createPdf)
-    console.log('  - typeof pdfMake.addVirtualFileSystem:', typeof pdfMake?.addVirtualFileSystem)
 
     // Étape 3: Charger vfs_fonts - il va s'auto-enregistrer grâce au global
     const pdfFontsModule = await import('pdfmake/build/vfs_fonts')
-    console.log('Step 3: vfs_fonts loaded')
 
     // Vérifier si l'auto-enregistrement a fonctionné
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vfsFonts: any = pdfFontsModule.default || pdfFontsModule
     const fontKeys = Object.keys(vfsFonts || {})
-    console.log('Step 4: VFS analysis')
-    console.log('  - vfsFonts type:', typeof vfsFonts)
-    console.log('  - vfsFonts keys count:', fontKeys.length)
-    console.log('  - Sample keys:', fontKeys.slice(0, 4))
 
     // Si les fonts n'ont pas été auto-enregistrées, le faire manuellement
     if (fontKeys.length > 0 && fontKeys.includes('Roboto-Regular.ttf')) {
-      console.log('Step 5: Manually registering fonts via addVirtualFileSystem')
       if (typeof pdfMake.addVirtualFileSystem === 'function') {
         pdfMake.addVirtualFileSystem(vfsFonts)
       } else {
@@ -113,39 +101,29 @@ async function initializePdfMake(): Promise<boolean> {
       }
     }
 
-    console.log('Step 6: Roboto font configuration set')
 
     // Étape 5: Charger les fonts Garamond (police par défaut pour les documents juridiques)
     try {
       await loadGaramondFonts(pdfMake)
-      console.log('Step 7: Garamond fonts loaded')
     } catch (garamondErr) {
       console.warn('Failed to load Garamond fonts, falling back to Roboto:', garamondErr)
     }
 
     // Vérification finale
-    console.log('Step 8: Final verification')
-    console.log('  - pdfMake.fonts:', JSON.stringify(pdfMake.fonts))
-    console.log('  - pdfMake.virtualfs type:', typeof pdfMake.virtualfs)
     if (pdfMake.virtualfs && typeof pdfMake.virtualfs.readFileSync === 'function') {
       // Test Roboto
       try {
-        const testRoboto = pdfMake.virtualfs.readFileSync('Roboto-Regular.ttf')
-        console.log('  - Roboto-Regular.ttf:', testRoboto ? 'OK' : 'FAILED')
+        pdfMake.virtualfs.readFileSync('Roboto-Regular.ttf')
       } catch (e) {
-        console.log('  - Roboto-Regular.ttf: FAILED')
       }
       // Test Garamond
       try {
-        const testGaramond = pdfMake.virtualfs.readFileSync('EBGaramond-Regular.ttf')
-        console.log('  - EBGaramond-Regular.ttf:', testGaramond ? 'OK' : 'FAILED')
+        pdfMake.virtualfs.readFileSync('EBGaramond-Regular.ttf')
       } catch (e) {
-        console.log('  - EBGaramond-Regular.ttf: FAILED (Garamond not loaded)')
       }
     }
 
     fontsInitialized = true
-    console.log('=== PDF Export: Initialization complete ===')
     return true
 
   } catch (error) {
@@ -847,7 +825,6 @@ export function useExportPDFNative() {
       // Générer le numéro de document (incrémente le compteur)
       const documentNumber = useDocumentCounterStore.getState().getNextNumber()
 
-      console.log('PDF Export: Starting conversion...')
 
       // Créer le numéroteur si activé
       const numberer = pdfSettings.headingNumbering.enabled
@@ -863,7 +840,6 @@ export function useExportPDFNative() {
 
       // Convertir le contenu en format pdfmake
       const content = converter(doc.content)
-      console.log('PDF Export: Content converted', content ? 'OK' : 'FAILED')
 
       if (!content) {
         toast.error('Impossible de convertir le document')
@@ -899,7 +875,6 @@ export function useExportPDFNative() {
         }
       }
 
-      console.log('PDF Export: Creating document definition...')
 
       // Utiliser les paramètres personnalisés ou les valeurs par défaut
       const baseFontSize = pdfSettings.typography.baseFontSize
@@ -908,7 +883,6 @@ export function useExportPDFNative() {
       // Déterminer la police (préférence utilisateur ou fallback)
       const preferredFont = pdfSettings.typography.fontFamily
       const availableFont = preferredFont === 'Garamond' ? getAvailableFont(pdfMake) : 'Roboto'
-      console.log('PDF Export: Using font:', availableFont)
 
       // Convertir les marges de cm en points
       const marginsInPoints = {
@@ -1090,7 +1064,6 @@ export function useExportPDFNative() {
           // Handle external images
           if (item.image) {
             if (item.image.startsWith('http')) {
-              console.log('PDF Export: Skipping external image')
               return { text: '[Image externe non exportée]', italics: true, color: '#999999' }
             }
             // Large base64 images will be compressed asynchronously before this step
@@ -1115,9 +1088,7 @@ export function useExportPDFNative() {
           if (item.image && item.image.startsWith('data:') && item.image.length > 100000) {
             try {
               item.image = await compressImage(item.image)
-              console.log('PDF Export: Compressed large image')
             } catch {
-              console.log('PDF Export: Failed to compress image, using as-is')
             }
           }
           if (item.stack && Array.isArray(item.stack)) await compressLargeImages(item.stack)
@@ -1134,10 +1105,6 @@ export function useExportPDFNative() {
         : docDefinition.content
 
       // Créer le document PDF
-      console.log('PDF Export: Creating PDF document...')
-      console.log('  - docDefinition.defaultStyle:', JSON.stringify(docDefinition.defaultStyle))
-      console.log('  - docDefinition.pageSize:', docDefinition.pageSize)
-      console.log('  - Content items count:', Array.isArray(cleanedContent) ? cleanedContent.length : 1)
 
       const finalDocDefinition = {
         ...docDefinition,
@@ -1148,7 +1115,6 @@ export function useExportPDFNative() {
       let pdfDoc: any
       try {
         pdfDoc = (pdfMake as any).createPdf(finalDocDefinition)
-        console.log('PDF Export: pdfDoc created successfully')
       } catch (createErr) {
         console.error('PDF Export: Error in createPdf:', createErr)
         throw createErr
@@ -1156,14 +1122,12 @@ export function useExportPDFNative() {
 
       // Générer le buffer PDF et sauvegarder
       // pdfmake moderne (0.3.x) utilise des Promises, pas des callbacks
-      console.log('PDF Export: Getting buffer (this may take a moment)...')
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let buffer: any
       try {
         // getBuffer() retourne une Promise dans pdfmake 0.3.x
         buffer = await pdfDoc.getBuffer()
-        console.log('PDF Export: Buffer received via Promise, size:', buffer?.byteLength || buffer?.length)
       } catch (bufferErr) {
         console.error('PDF Export: getBuffer() Promise rejected:', bufferErr)
         throw bufferErr
@@ -1182,11 +1146,9 @@ export function useExportPDFNative() {
         pdfBuffer = new Uint8Array(buffer)
       }
 
-      console.log('PDF Export: Writing file...')
       await writeBinaryFile(outputPath, pdfBuffer)
       lastExportPaths.set(documentId, outputPath)
       toast.success('PDF exporté avec succès')
-      console.log('PDF Export: Success!')
 
     } catch (error) {
       console.error('Error exporting to PDF:', error)
