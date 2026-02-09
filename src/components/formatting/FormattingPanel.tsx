@@ -345,21 +345,28 @@ export function FormattingPanel() {
           <ToolButton
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             isActive={editor.isActive('heading', { level: 1 })}
-            title="Titre 1"
+            title="Titre du document (Cmd+1)"
           >
-            <span className="text-xs font-bold">H1</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wide">Titre</span>
           </ToolButton>
           <ToolButton
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             isActive={editor.isActive('heading', { level: 2 })}
-            title="Titre 2"
+            title="Titre 1 (Cmd+2)"
           >
-            <span className="text-xs font-bold">H2</span>
+            <span className="text-xs font-bold">H1</span>
           </ToolButton>
           <ToolButton
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             isActive={editor.isActive('heading', { level: 3 })}
-            title="Titre 3"
+            title="Titre 2 (Cmd+3)"
+          >
+            <span className="text-xs font-bold">H2</span>
+          </ToolButton>
+          <ToolButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
+            isActive={editor.isActive('heading', { level: 4 })}
+            title="Titre 3 (Cmd+4)"
           >
             <span className="text-xs font-bold">H3</span>
           </ToolButton>

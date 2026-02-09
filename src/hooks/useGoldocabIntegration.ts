@@ -10,6 +10,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/shell';
 import { useDocumentStore } from '../store/useDocumentStore';
+import { useFileOperations } from './useFileOperations';
 import { handleError } from '../lib/errorHandler';
 
 // ============================================================================
@@ -238,17 +239,20 @@ export function useGoldocabIntegration() {
           const filePath = params.get('path');
           const dossierId = params.get('dossierId');
           const dossierName = params.get('dossierName');
+          const mode = params.get('mode');
 
           if (filePath) {
-            // Start edit session and open the file
-            await startEditSession(filePath, dossierId || undefined, dossierName || undefined);
-
-            // Load the file content
-            const content = await invoke<string>('read_file', { path: filePath });
-
-            // Create a new document with this content
-            // This would need to be implemented based on your document store
-            console.log('[GoldoCab] File loaded, content length:', content.length);
+            if (mode === 'note') {
+              // Mode note: ouvrir directement le fichier .md dans l'editeur
+              console.log('[GoldoCab] Opening note file:', filePath);
+              const { openFileFromPath } = useFileOperations();
+              await openFileFromPath(filePath);
+            } else {
+              // Mode document: session d'edition classique
+              await startEditSession(filePath, dossierId || undefined, dossierName || undefined);
+              const content = await invoke<string>('read_file', { path: filePath });
+              console.log('[GoldoCab] File loaded, content length:', content.length);
+            }
           }
         } catch (err) {
           handleError(err, 'GoldoCab');
@@ -333,6 +337,19 @@ export async function notifyGoldocabDocumentModified(filePath: string): Promise<
 
   try {
     // Use Tauri shell to open URL scheme
+    await open(url);
+  } catch (err) {
+    handleError(err, 'GoldoCab', { silent: true });
+  }
+}
+
+/**
+ * Notify GoldoCab that a note was modified
+ */
+export async function notifyGoldocabNoteModified(filePath: string, noteId: string): Promise<void> {
+  const url = `goldocab://note/modified?path=${encodeURIComponent(filePath)}&noteID=${noteId}`;
+
+  try {
     await open(url);
   } catch (err) {
     handleError(err, 'GoldoCab', { silent: true });

@@ -14,7 +14,7 @@ export const KeyboardShortcutsExtension = Extension.create({
       // Strikethrough: Cmd+Shift+X (alternative plus fiable)
       'Mod-Shift-X': () => this.editor.commands.toggleStrike(),
 
-      // Heading shortcuts: Cmd+1, Cmd+2, Cmd+3
+      // Heading shortcuts: Cmd+1 (titre doc), Cmd+2 (H1), Cmd+3 (H2), Cmd+4 (H3)
       'Mod-1': () => this.editor.commands.toggleHeading({ level: 1 }),
       'Mod-2': () => this.editor.commands.toggleHeading({ level: 2 }),
       'Mod-3': () => this.editor.commands.toggleHeading({ level: 3 }),

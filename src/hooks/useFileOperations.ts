@@ -6,7 +6,27 @@ import { useRecentFilesStore } from '../store/useRecentFilesStore'
 import { useToast } from './useToast'
 import { useImportDOCX } from './useImportDOCX'
 import { JSONContent } from '@tiptap/core'
-import { markdownToJson as parseMarkdown, jsonToMarkdown as formatMarkdown } from '../lib/markdownParser'
+import { markdownToJson as parseMarkdown, jsonToMarkdown as formatMarkdown, parseFrontmatter, serializeFrontmatter, NoteFrontmatter } from '../lib/markdownParser'
+import { open as shellOpen } from '@tauri-apps/api/shell'
+
+// Cache frontmatter pour les notes GoldoCab ouvertes
+// Permet de preserver les metadonnees lors de la sauvegarde
+const noteFrontmatterCache = new Map<string, NoteFrontmatter>()
+
+// Notifier GoldoCab qu'une note a ete modifiee
+async function notifyGoldocabNoteModified(filePath: string, noteId: string) {
+  try {
+    const url = `goldocab://note/modified?path=${encodeURIComponent(filePath)}&noteID=${noteId}`
+    await shellOpen(url)
+  } catch (err) {
+    console.warn('[Citadelle] Notification GoldoCab echouee:', err)
+  }
+}
+
+// Exporter le cache pour usage externe
+export function getFrontmatterForDocument(documentId: string): NoteFrontmatter | undefined {
+  return noteFrontmatterCache.get(documentId)
+}
 
 export function useFileOperations() {
   const addDocument = useDocumentStore((state) => state.addDocument)
@@ -74,9 +94,33 @@ export function useFileOperations() {
         preview = '[Document Word]'
       } else {
         // Text files (md, txt, etc.)
-        const content = await invoke<string>('read_file', { path: filePath })
-        jsonContent = markdownToJson(content)
-        preview = content.substring(0, 100)
+        const rawContent = await invoke<string>('read_file', { path: filePath })
+
+        // Check for GoldoCab note frontmatter
+        const { frontmatter, body } = parseFrontmatter(rawContent)
+        const contentToParse = frontmatter ? body : rawContent
+        jsonContent = markdownToJson(contentToParse)
+        preview = contentToParse.substring(0, 100)
+
+        // Store frontmatter in metadata if present
+        if (frontmatter) {
+          const id = addDocument({
+            title: frontmatter.title || fileName,
+            content: jsonContent,
+            filePath: filePath,
+            isDirty: false,
+            metadata: {
+              createdAt: frontmatter.createdAt,
+              modifiedAt: frontmatter.updatedAt,
+              tags: frontmatter.tags,
+            },
+          })
+          // Store frontmatter reference for later save
+          noteFrontmatterCache.set(id, frontmatter)
+          markAsSaved(id)
+          addRecentFile({ path: filePath, title: frontmatter.title || fileName, preview })
+          return
+        }
       }
 
       const id = addDocument({
@@ -128,9 +172,27 @@ export function useFileOperations() {
         filePath = selected
       }
 
-      // Convert JSON to Markdown and save
+      // Convert JSON to Markdown
       const markdown = jsonToMarkdown(doc.content)
-      await invoke('write_file', { path: filePath, content: markdown })
+
+      // Check if this document has frontmatter (GoldoCab note)
+      const frontmatter = noteFrontmatterCache.get(documentId)
+      let contentToWrite: string
+
+      if (frontmatter) {
+        // Update the updatedAt timestamp
+        frontmatter.updatedAt = new Date().toISOString()
+        contentToWrite = serializeFrontmatter(frontmatter) + '\n\n' + markdown.trim() + '\n'
+      } else {
+        contentToWrite = markdown
+      }
+
+      await invoke('write_file', { path: filePath, content: contentToWrite })
+
+      // Notify GoldoCab if this is a note file
+      if (frontmatter) {
+        notifyGoldocabNoteModified(filePath, frontmatter.id)
+      }
 
       // Update document state
       setFilePath(documentId, filePath)

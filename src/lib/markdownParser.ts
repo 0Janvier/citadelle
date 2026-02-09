@@ -1,5 +1,164 @@
 import type { JSONContent } from '@tiptap/react'
 
+// ============================================================================
+// Frontmatter Types & Functions (GoldoCab Notes Integration)
+// ============================================================================
+
+export interface NoteFrontmatter {
+  id: string
+  title: string
+  dossierID?: string
+  clientID?: string
+  folderID?: string
+  tags?: string[]
+  isPinned?: boolean
+  color?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Parse le frontmatter YAML d'un fichier Markdown.
+ * Le frontmatter est delimite par --- au debut du fichier.
+ */
+export function parseFrontmatter(markdown: string): {
+  frontmatter: NoteFrontmatter | null
+  body: string
+} {
+  const trimmed = markdown.trimStart()
+
+  if (!trimmed.startsWith('---')) {
+    return { frontmatter: null, body: markdown }
+  }
+
+  // Trouver la fin du frontmatter (second ---)
+  const endIndex = trimmed.indexOf('\n---', 3)
+  if (endIndex === -1) {
+    return { frontmatter: null, body: markdown }
+  }
+
+  const frontmatterBlock = trimmed.substring(4, endIndex) // Skip first ---\n
+  const body = trimmed.substring(endIndex + 4).replace(/^\n+/, '') // Skip \n---\n
+
+  // Parser les paires cle: valeur
+  const metadata: Record<string, unknown> = {}
+  const lines = frontmatterBlock.split('\n')
+
+  for (const line of lines) {
+    const colonIdx = line.indexOf(':')
+    if (colonIdx === -1) continue
+
+    const key = line.substring(0, colonIdx).trim()
+    let value = line.substring(colonIdx + 1).trim()
+
+    // Retirer les guillemets
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      value = value.slice(1, -1).replace(/\\"/g, '"')
+    }
+
+    // Parser les types
+    if (value === 'true') {
+      metadata[key] = true
+    } else if (value === 'false') {
+      metadata[key] = false
+    } else if (value === 'null' || value === '') {
+      // skip
+    } else if (value.startsWith('[') && value.endsWith(']')) {
+      // Parser tableau: ["a", "b"]
+      const inner = value.slice(1, -1)
+      metadata[key] = inner
+        .split(',')
+        .map(item => {
+          const trimmed = item.trim()
+          if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+            return trimmed.slice(1, -1)
+          }
+          return trimmed
+        })
+        .filter(item => item.length > 0)
+    } else {
+      metadata[key] = value
+    }
+  }
+
+  // Valider les champs requis
+  if (!metadata.id || !metadata.createdAt) {
+    return { frontmatter: null, body: markdown }
+  }
+
+  const frontmatter: NoteFrontmatter = {
+    id: metadata.id as string,
+    title: (metadata.title as string) || 'Sans titre',
+    dossierID: metadata.dossierID as string | undefined,
+    clientID: metadata.clientID as string | undefined,
+    folderID: metadata.folderID as string | undefined,
+    tags: (metadata.tags as string[]) || [],
+    isPinned: (metadata.isPinned as boolean) || false,
+    color: metadata.color as string | undefined,
+    createdAt: metadata.createdAt as string,
+    updatedAt: (metadata.updatedAt as string) || new Date().toISOString(),
+  }
+
+  return { frontmatter, body }
+}
+
+/**
+ * Serialise un objet NoteFrontmatter en bloc YAML frontmatter.
+ */
+export function serializeFrontmatter(meta: NoteFrontmatter): string {
+  const lines: string[] = ['---']
+
+  lines.push(`id: "${meta.id}"`)
+  lines.push(`title: "${(meta.title || '').replace(/"/g, '\\"')}"`)
+
+  if (meta.dossierID) lines.push(`dossierID: "${meta.dossierID}"`)
+  if (meta.clientID) lines.push(`clientID: "${meta.clientID}"`)
+  if (meta.folderID) lines.push(`folderID: "${meta.folderID}"`)
+
+  const tags = meta.tags || []
+  const tagsStr = tags.map(t => `"${t}"`).join(', ')
+  lines.push(`tags: [${tagsStr}]`)
+
+  lines.push(`isPinned: ${meta.isPinned || false}`)
+
+  if (meta.color) lines.push(`color: "${meta.color}"`)
+
+  lines.push(`createdAt: "${meta.createdAt}"`)
+  lines.push(`updatedAt: "${meta.updatedAt}"`)
+
+  lines.push('---')
+
+  return lines.join('\n')
+}
+
+/**
+ * Parse un fichier Markdown avec frontmatter et retourne le frontmatter + le contenu TipTap JSON.
+ */
+export function markdownWithFrontmatterToJson(markdown: string): {
+  frontmatter: NoteFrontmatter | null
+  content: JSONContent
+} {
+  const { frontmatter, body } = parseFrontmatter(markdown)
+  const content = markdownToJson(body)
+  return { frontmatter, content }
+}
+
+/**
+ * Serialise un contenu TipTap JSON en Markdown avec frontmatter.
+ */
+export function jsonToMarkdownWithFrontmatter(
+  json: JSONContent,
+  frontmatter: NoteFrontmatter
+): string {
+  const fm = serializeFrontmatter(frontmatter)
+  const md = jsonToMarkdown(json)
+  return fm + '\n\n' + md + '\n'
+}
+
+// ============================================================================
+// Markdown ↔ TipTap JSON Conversion
+// ============================================================================
+
 /**
  * Convertit du Markdown en format TipTap JSON.
  * Gère: titres, paragraphes, listes, code, citations, tableaux, images, liens, formatage inline.

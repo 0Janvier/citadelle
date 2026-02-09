@@ -9,6 +9,7 @@ pub mod themes;
 pub mod export_templates;
 pub mod goldocab_sessions;
 pub mod goldocab_db;
+pub mod goldocab_notes;
 
 pub use filesystem::*;
 pub use search::*;
@@ -20,3 +21,4 @@ pub use themes::*;
 pub use export_templates::*;
 pub use goldocab_sessions::*;
 pub use goldocab_db::*;
+pub use goldocab_notes::*;

@@ -86,6 +86,13 @@ fn main() {
             commands::search_goldocab_dossiers,
             commands::get_goldocab_client,
             commands::get_goldocab_dossier_items,
+            // GoldoCab notes (shared .md files)
+            commands::list_goldocab_notes,
+            commands::read_goldocab_note,
+            commands::create_goldocab_note,
+            commands::save_goldocab_note,
+            commands::delete_goldocab_note,
+            commands::list_note_folders,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

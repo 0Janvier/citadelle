@@ -31,9 +31,14 @@
 }
 
 /* Headings */
+/* H1 = Titre du document (sans numerotation, centre, tres prominent) */
 .ProseMirror h1 {
-  @apply text-4xl font-bold mb-4 mt-6;
+  @apply text-4xl font-extrabold mb-6 mt-8;
   text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border);
 }
 
 .ProseMirror h2 {

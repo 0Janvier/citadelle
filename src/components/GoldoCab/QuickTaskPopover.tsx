@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useGoldocabNotesStore } from '../../store/useGoldocabNotesStore'
+import { useGoldocabNotesFilesStore } from '../../store/useGoldocabNotesFilesStore'
 import { useGoldocabDataStore } from '../../store/useGoldocabDataStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
 import { useEditorStore } from '../../store/useEditorStore'
@@ -17,10 +17,8 @@ export function QuickTaskPopover({ isOpen, onClose }: QuickTaskPopoverProps) {
   const [isSending, setIsSending] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const addNote = useGoldocabNotesStore((s) => s.addNote)
-  const syncNote = useGoldocabNotesStore((s) => s.syncNote)
+  const createNote = useGoldocabNotesFilesStore((s) => s.createNote)
   const activeDocumentId = useDocumentStore((s) => s.activeDocumentId)
-  const activeDocument = useDocumentStore((s) => s.getActiveDocument())
   const linkedDossier = useGoldocabDataStore((s) =>
     activeDocumentId ? s.getLinkedDossier(activeDocumentId) : null
   )
@@ -49,32 +47,47 @@ export function QuickTaskPopover({ isOpen, onClose }: QuickTaskPopoverProps) {
 
     setIsSending(true)
 
-    // Creer la note/tache dans le store
-    addNote({
-      type: 'task',
-      content: content.trim(),
-      documentId: activeDocumentId,
-      documentTitle: activeDocument?.title || null,
-      dossierId: linkedDossier ? String(linkedDossier.dossierId) : null,
-      dossierName: linkedDossier?.dossierName || null,
-      priority,
-      dueDate: dueDate || null,
-    })
+    // Build tags with task metadata
+    const tags: string[] = ['tache']
+    if (priority !== 'normal') tags.push(`priorite:${priority === 'high' ? 'haute' : 'basse'}`)
+    if (dueDate) tags.push(`echeance:${dueDate}`)
 
-    // Sync immediate : recuperer la derniere note ajoutee
-    const notes = useGoldocabNotesStore.getState().notes
-    if (notes.length > 0) {
-      await syncNote(notes[0].id)
+    // Build content with metadata header
+    let body = content.trim()
+    if (dueDate || priority === 'high') {
+      const meta: string[] = []
+      if (priority === 'high') meta.push('**Priorite:** Haute')
+      if (priority === 'low') meta.push('**Priorite:** Basse')
+      if (dueDate) meta.push(`**Echeance:** ${new Date(dueDate).toLocaleDateString('fr-FR')}`)
+      body = meta.join(' | ') + '\n\n' + body
     }
 
-    useToastStore.getState().addToast({
-      type: 'success',
-      message: 'Tache envoyee a GoldoCab',
+    // Extract title from first line
+    const firstLine = content.trim().split('\n')[0].slice(0, 80)
+    const title = firstLine || 'Tache sans titre'
+
+    const path = await createNote({
+      title,
+      content: body,
+      dossierId: linkedDossier ? String(linkedDossier.dossierId) : undefined,
+      tags,
     })
+
+    if (path) {
+      useToastStore.getState().addToast({
+        type: 'success',
+        message: 'Tache envoyee a GoldoCab',
+      })
+    } else {
+      useToastStore.getState().addToast({
+        type: 'error',
+        message: 'Erreur lors de la creation de la tache',
+      })
+    }
 
     setIsSending(false)
     onClose()
-  }, [content, priority, dueDate, activeDocumentId, activeDocument, linkedDossier, addNote, syncNote, onClose])
+  }, [content, priority, dueDate, linkedDossier, createNote, onClose])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

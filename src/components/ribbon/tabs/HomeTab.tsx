@@ -354,25 +354,34 @@ export function HomeTab({ editor }: HomeTabProps) {
             variant="default"
             isActive={editor.isActive('heading', { level: 1 })}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            tooltip="Titre 1 (Cmd+1)"
+            tooltip="Titre du document (Cmd+1)"
+            className="!text-[10px] !font-extrabold !uppercase !tracking-wide"
+          >
+            Titre
+          </RibbonButton>
+          <RibbonButton
+            variant="default"
+            isActive={editor.isActive('heading', { level: 2 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            tooltip="Titre 1 (Cmd+2)"
             className="!text-base !font-bold"
           >
             H1
           </RibbonButton>
           <RibbonButton
             variant="default"
-            isActive={editor.isActive('heading', { level: 2 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            tooltip="Titre 2 (Cmd+2)"
+            isActive={editor.isActive('heading', { level: 3 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            tooltip="Titre 2 (Cmd+3)"
             className="!text-sm !font-bold"
           >
             H2
           </RibbonButton>
           <RibbonButton
             variant="default"
-            isActive={editor.isActive('heading', { level: 3 })}
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            tooltip="Titre 3 (Cmd+3)"
+            isActive={editor.isActive('heading', { level: 4 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
+            tooltip="Titre 3 (Cmd+4)"
             className="!text-xs !font-semibold"
           >
             H3

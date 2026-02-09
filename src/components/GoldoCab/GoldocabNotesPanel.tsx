@@ -1,8 +1,11 @@
-// Panneau pour créer et gérer les notes/tâches GoldoCab
+// Panneau pour creer et gerer les notes/taches GoldoCab
+// Consolidation: tout passe par le systeme fichiers (~/Documents/Cabinet/Notes/)
 import { useState, useEffect } from 'react'
-import { useGoldocabNotesStore, GoldocabNote } from '../../store/useGoldocabNotesStore'
+import { useGoldocabNotesFilesStore, NoteFileEntry } from '../../store/useGoldocabNotesFilesStore'
 import { useGoldocabDataStore } from '../../store/useGoldocabDataStore'
 import { useDocumentStore } from '../../store/useDocumentStore'
+import { useFileOperations } from '../../hooks/useFileOperations'
+import { useToastStore } from '../../store/useToastStore'
 import { open } from '@tauri-apps/api/shell'
 import type { GoldocabItem } from '../../types/goldocab'
 
@@ -12,22 +15,18 @@ interface GoldocabNotesPanelProps {
 }
 
 export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: GoldocabNotesPanelProps) {
-  const {
-    notes,
-    isLoading,
-    error,
-    addNote,
-    removeNote,
-    syncNote,
-    syncAll,
-    getUnsyncedCount,
-    clearError,
-    clearSynced,
-  } = useGoldocabNotesStore()
+  const fileNotes = useGoldocabNotesFilesStore((s) => s.notes)
+  const isLoading = useGoldocabNotesFilesStore((s) => s.isLoading)
+  const error = useGoldocabNotesFilesStore((s) => s.error)
+  const loadNotes = useGoldocabNotesFilesStore((s) => s.loadNotes)
+  const createNote = useGoldocabNotesFilesStore((s) => s.createNote)
+  const deleteNote = useGoldocabNotesFilesStore((s) => s.deleteNote)
+  const clearError = useGoldocabNotesFilesStore((s) => s.clearError)
 
   const activeDocumentId = useDocumentStore((state) => state.activeDocumentId)
   const documents = useDocumentStore((state) => state.documents)
   const activeDocument = documents.find((d) => d.id === activeDocumentId)
+  const { openFileFromPath } = useFileOperations()
 
   const linkedDossier = useGoldocabDataStore((s) =>
     activeDocumentId ? s.getLinkedDossier(activeDocumentId) : null
@@ -37,6 +36,11 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
 
   const [dossierItems, setDossierItems] = useState<GoldocabItem[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
+
+  // Charger les notes au montage
+  useEffect(() => {
+    loadNotes()
+  }, [loadNotes])
 
   // Fetch dossier items when linked dossier changes
   useEffect(() => {
@@ -63,27 +67,50 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
 
   const [showNewForm, setShowNewForm] = useState<'note' | 'task' | null>(null)
   const [content, setContent] = useState('')
+  const [title, setTitle] = useState('')
   const [priority, setPriority] = useState<'low' | 'normal' | 'high'>('normal')
   const [dueDate, setDueDate] = useState('')
 
-  const unsyncedCount = getUnsyncedCount()
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!content.trim()) return
 
-    addNote({
-      type: showNewForm!,
-      content: content.trim(),
-      documentId: activeDocumentId,
-      documentTitle: activeDocument?.title || null,
-      dossierId: linkedDossier ? String(linkedDossier.dossierId) : null,
-      dossierName: linkedDossier?.dossierName || null,
-      priority: showNewForm === 'task' ? priority : 'normal',
-      dueDate: showNewForm === 'task' && dueDate ? dueDate : null,
+    // Build tags
+    const tags: string[] = []
+    if (showNewForm === 'task') {
+      tags.push('tache')
+      if (priority !== 'normal') tags.push(`priorite:${priority === 'high' ? 'haute' : 'basse'}`)
+      if (dueDate) tags.push(`echeance:${dueDate}`)
+    }
+
+    // Build content with task metadata
+    let body = content.trim()
+    if (showNewForm === 'task' && (dueDate || priority !== 'normal')) {
+      const meta: string[] = []
+      if (priority === 'high') meta.push('**Priorite:** Haute')
+      if (priority === 'low') meta.push('**Priorite:** Basse')
+      if (dueDate) meta.push(`**Echeance:** ${new Date(dueDate).toLocaleDateString('fr-FR')}`)
+      body = meta.join(' | ') + '\n\n' + body
+    }
+
+    const noteTitle = title.trim() || content.trim().split('\n')[0].slice(0, 80) || 'Sans titre'
+
+    const path = await createNote({
+      title: noteTitle,
+      content: body,
+      dossierId: linkedDossier ? String(linkedDossier.dossierId) : undefined,
+      tags,
     })
+
+    if (path) {
+      useToastStore.getState().addToast({
+        type: 'success',
+        message: showNewForm === 'task' ? 'Tache creee' : 'Note creee',
+      })
+    }
 
     // Reset form
     setContent('')
+    setTitle('')
     setPriority('normal')
     setDueDate('')
     setShowNewForm(null)
@@ -91,10 +118,22 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
 
   const handleCancel = () => {
     setContent('')
+    setTitle('')
     setPriority('normal')
     setDueDate('')
     setShowNewForm(null)
   }
+
+  const handleDeleteNote = async (path: string) => {
+    const ok = await deleteNote(path)
+    if (ok) {
+      useToastStore.getState().addToast({ type: 'success', message: 'Note supprimee' })
+    }
+  }
+
+  // Separate tasks from notes based on tags
+  const taskNotes = fileNotes.filter((n) => n.tags.includes('tache'))
+  const regularNotes = fileNotes.filter((n) => !n.tags.includes('tache'))
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg)]">
@@ -103,12 +142,19 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
         <div className="flex items-center gap-2">
           <GoldocabLogo />
           <span className="font-semibold text-[var(--text)]">GoldoCab</span>
-          {unsyncedCount > 0 && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-[var(--accent)] text-white rounded-full">
-              {unsyncedCount}
+          {fileNotes.length > 0 && (
+            <span className="px-2 py-0.5 text-xs font-medium bg-[var(--bg-secondary)] text-[var(--text-secondary)] rounded-full">
+              {fileNotes.length}
             </span>
           )}
         </div>
+        <button
+          onClick={() => loadNotes()}
+          className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] transition-colors"
+          disabled={isLoading}
+        >
+          {isLoading ? '...' : 'Rafraichir'}
+        </button>
       </div>
 
       {/* Erreur */}
@@ -225,8 +271,8 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
               <TaskIcon className="w-4 h-4 text-blue-500" />
             </div>
             <div className="text-left">
-              <div className="font-medium text-[var(--text)]">Nouvelle tâche</div>
-              <div className="text-xs text-[var(--text-secondary)]">Avec priorité et échéance</div>
+              <div className="font-medium text-[var(--text)]">Nouvelle tache</div>
+              <div className="text-xs text-[var(--text-secondary)]">Avec priorite et echeance</div>
             </div>
           </button>
 
@@ -255,22 +301,29 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
               <NoteIcon className="w-4 h-4 text-amber-500" />
             )}
             <span className="font-medium text-[var(--text)]">
-              {showNewForm === 'task' ? 'Nouvelle tâche' : 'Nouvelle note'}
+              {showNewForm === 'task' ? 'Nouvelle tache' : 'Nouvelle note'}
             </span>
           </div>
+
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Titre..."
+            className="w-full p-2 mb-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)]"
+            autoFocus
+          />
 
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder={showNewForm === 'task' ? 'Décrire la tâche...' : 'Contenu de la note...'}
+            placeholder={showNewForm === 'task' ? 'Decrire la tache...' : 'Contenu de la note...'}
             className="w-full h-24 p-3 text-sm bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg resize-none focus:outline-none focus:border-[var(--accent)]"
-            autoFocus
           />
 
           {showNewForm === 'task' && (
             <div className="mt-3 flex gap-3">
               <div className="flex-1">
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">Priorité</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">Priorite</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as 'low' | 'normal' | 'high')}
@@ -282,7 +335,7 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
                 </select>
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-[var(--text-secondary)] mb-1">Échéance</label>
+                <label className="block text-xs text-[var(--text-secondary)] mb-1">Echeance</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -302,147 +355,128 @@ export function GoldocabNotesPanel({ onClose: _onClose, onOpenDossierPicker }: G
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!content.trim()}
+              disabled={!content.trim() || isLoading}
               className="flex-1 py-2 text-sm bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              Ajouter
+              {isLoading ? 'Creation...' : 'Creer'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Liste des notes */}
+      {/* Liste des notes et taches */}
       <div className="flex-1 overflow-y-auto">
-        {notes.length === 0 ? (
+        {fileNotes.length === 0 && !isLoading ? (
           <div className="p-8 text-center text-[var(--text-secondary)]">
             <GoldocabLogo className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Aucune note ou tâche</p>
+            <p className="text-sm">Aucune note ou tache</p>
+            <p className="text-xs mt-1 opacity-60">Les notes sont stockees dans ~/Documents/Cabinet/Notes/</p>
           </div>
         ) : (
-          <div className="p-4 space-y-2">
-            {notes.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onSync={() => syncNote(note.id)}
-                onDelete={() => removeNote(note.id)}
-                isLoading={isLoading}
-              />
-            ))}
+          <div className="p-4 space-y-3">
+            {/* Taches */}
+            {taskNotes.length > 0 && (
+              <div>
+                <span className="text-[10px] font-medium uppercase tracking-wide opacity-40">
+                  Taches ({taskNotes.length})
+                </span>
+                <div className="mt-1 space-y-1">
+                  {taskNotes.map((note) => (
+                    <NoteFileCard
+                      key={note.path}
+                      note={note}
+                      isTask
+                      onOpen={() => openFileFromPath(note.path)}
+                      onDelete={() => handleDeleteNote(note.path)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {regularNotes.length > 0 && (
+              <div>
+                <span className="text-[10px] font-medium uppercase tracking-wide opacity-40">
+                  Notes ({regularNotes.length})
+                </span>
+                <div className="mt-1 space-y-1">
+                  {regularNotes.map((note) => (
+                    <NoteFileCard
+                      key={note.path}
+                      note={note}
+                      onOpen={() => openFileFromPath(note.path)}
+                      onDelete={() => handleDeleteNote(note.path)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
-
-      {/* Actions bas */}
-      {notes.length > 0 && (
-        <div className="p-4 border-t border-[var(--border)] space-y-2">
-          {unsyncedCount > 0 && (
-            <button
-              onClick={syncAll}
-              disabled={isLoading}
-              className="w-full py-2.5 text-sm font-medium bg-[var(--accent)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <LoadingSpinner />
-              ) : (
-                <>
-                  <SyncIcon className="w-4 h-4" />
-                  Synchroniser tout ({unsyncedCount})
-                </>
-              )}
-            </button>
-          )}
-          <button
-            onClick={clearSynced}
-            className="w-full py-2 text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-          >
-            Effacer les éléments synchronisés
-          </button>
-        </div>
-      )}
     </div>
   )
 }
 
-// Carte pour une note/tâche
-function NoteCard({
+// Carte pour une note fichier
+function NoteFileCard({
   note,
-  onSync,
+  isTask,
+  onOpen,
   onDelete,
-  isLoading,
 }: {
-  note: GoldocabNote
-  onSync: () => void
+  note: NoteFileEntry
+  isTask?: boolean
+  onOpen: () => void
   onDelete: () => void
-  isLoading: boolean
 }) {
-  const priorityColors = {
-    low: 'text-[var(--text-secondary)]',
-    normal: 'text-blue-500',
-    high: 'text-red-500',
-  }
+  const priorityTag = note.tags.find((t) => t.startsWith('priorite:'))
+  const dueDateTag = note.tags.find((t) => t.startsWith('echeance:'))
+  const isHigh = priorityTag === 'priorite:haute'
 
   return (
     <div
-      className={`p-3 rounded-lg border transition-colors ${
-        note.synced
-          ? 'bg-green-500/5 border-green-500/20'
-          : 'bg-[var(--bg-secondary)] border-[var(--border)]'
-      }`}
+      className="flex items-start gap-2 px-2 py-2 rounded text-xs bg-[var(--bg-secondary)] hover:bg-[var(--border)] transition-colors group"
     >
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5">
-          {note.type === 'task' ? (
-            <TaskIcon className={`w-4 h-4 ${priorityColors[note.priority]}`} />
-          ) : (
-            <NoteIcon className="w-4 h-4 text-amber-500" />
-          )}
-        </div>
+      <button onClick={onOpen} className="flex items-start gap-2 flex-1 min-w-0 text-left">
+        {isTask ? (
+          <TaskIcon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isHigh ? 'text-red-500' : 'text-blue-500'}`} />
+        ) : (
+          <NoteIcon className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-[var(--text)] line-clamp-2">{note.content}</p>
-          <div className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-            {note.documentTitle && (
-              <span className="truncate max-w-[120px]">{note.documentTitle}</span>
-            )}
-            {note.type === 'task' && note.dueDate && (
+          <div className="font-medium text-[var(--text)] truncate">{note.title || 'Sans titre'}</div>
+          <div className="text-[var(--text-secondary)] truncate">{note.preview}</div>
+          <div className="flex items-center gap-2 mt-0.5 text-[var(--text-secondary)]">
+            {note.folder && <span>{note.folder}</span>}
+            {dueDateTag && (
               <span className="flex items-center gap-1">
                 <CalendarIcon className="w-3 h-3" />
-                {new Date(note.dueDate).toLocaleDateString('fr-FR')}
+                {new Date(dueDateTag.replace('echeance:', '')).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
               </span>
             )}
-            {note.synced && (
-              <span className="text-green-500 flex items-center gap-1">
-                <CheckIcon className="w-3 h-3" />
-                Sync
-              </span>
+            {note.updated_at && (
+              <span>{new Date(note.updated_at).toLocaleDateString('fr-FR')}</span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          {!note.synced && (
-            <button
-              onClick={onSync}
-              disabled={isLoading}
-              className="p-1.5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors disabled:opacity-50"
-              title="Synchroniser"
-            >
-              <SyncIcon className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={onDelete}
-            className="p-1.5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-red-500 transition-colors"
-            title="Supprimer"
-          >
-            <TrashIcon className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      </button>
+      {note.is_pinned && (
+        <span className="text-amber-500 shrink-0 text-[10px]">pin</span>
+      )}
+      <button
+        onClick={onDelete}
+        className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+        title="Supprimer"
+      >
+        <TrashIcon className="w-3.5 h-3.5" />
+      </button>
     </div>
   )
 }
 
-// Icônes
+// Icones
 function GoldocabLogo({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -472,14 +506,6 @@ function NoteIcon({ className = 'w-5 h-5' }: { className?: string }) {
   )
 }
 
-function SyncIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-      <path d="M21 12a9 9 0 0 1-9 9m0 0a9 9 0 0 1-6.364-2.636M12 21v-4m0 0h4M3 12a9 9 0 0 1 9-9m0 0a9 9 0 0 1 6.364 2.636M12 3v4m0 0H8" />
-    </svg>
-  )
-}
-
 function TrashIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -500,32 +526,11 @@ function CalendarIcon({ className = 'w-5 h-5' }: { className?: string }) {
   )
 }
 
-function CheckIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  )
-}
-
 function XIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-function LoadingSpinner() {
-  return (
-    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
     </svg>
   )
 }

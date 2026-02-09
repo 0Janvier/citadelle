@@ -109,12 +109,12 @@ export const extensions = [
     emptyEditorClass: 'is-editor-empty',
   }),
 
-  // Smart typography with French guillemets « »
+  // Smart typography with French guillemets « » (single quotes disabled to preserve apostrophe on AZERTY)
   Typography.configure({
     openDoubleQuote: '« ',
     closeDoubleQuote: ' »',
-    openSingleQuote: '‹ ',
-    closeSingleQuote: ' ›',
+    openSingleQuote: false,
+    closeSingleQuote: false,
   }),
 
   // Clickable links
@@ -222,14 +222,17 @@ export const extensions = [
       (query) => {
         // Commandes de blocs intégrées (toujours disponibles)
         const builtinBlocks: Snippet[] = [
-          { id: 'block-h1', nom: 'Titre 1', description: 'Titre principal', raccourci: '/h1',
+          { id: 'block-title', nom: 'Titre du document', description: 'Titre principal sans numerotation', raccourci: '/titre',
             contenu: { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: ' ' }] },
             category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
-          { id: 'block-h2', nom: 'Titre 2', description: 'Sous-titre', raccourci: '/h2',
+          { id: 'block-h1', nom: 'Titre 1', description: 'Partie principale (I., II.)', raccourci: '/h1',
             contenu: { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: ' ' }] },
             category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
-          { id: 'block-h3', nom: 'Titre 3', description: 'Section', raccourci: '/h3',
+          { id: 'block-h2', nom: 'Titre 2', description: 'Section (A., B.)', raccourci: '/h2',
             contenu: { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: ' ' }] },
+            category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
+          { id: 'block-h3', nom: 'Titre 3', description: 'Point (1., 2.)', raccourci: '/h3',
+            contenu: { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: ' ' }] },
             category: 'general', variables: [], isBuiltin: true, usageCount: 0, createdAt: '', updatedAt: '' },
           { id: 'block-bullet', nom: 'Liste a puces', description: 'Liste non ordonnee', raccourci: '/liste',
             contenu: { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: ' ' }] }] }] },
